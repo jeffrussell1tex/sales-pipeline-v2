@@ -12,6 +12,7 @@
 // layer swapped for stand-ins (the repo has no React test renderer), so the
 // mutation harness's edits to useSettings.js reach these tests. The view gate,
 // App's wiring and the Sales Manager save are pinned at the source (§18b23).
+import { setRequestOrg } from '../src/utils/storage.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -54,8 +55,11 @@ export const waitForToken = ()     => ${w}.waitForToken();
     const defaults = new URL('../src/utils/settingsDefaults.js', import.meta.url).href;
     // The words module likewise (§0.249, the review's fixes L: the load says readRefusal's / failureWords' words).
     const words = new URL('../src/utils/refusalWords.js', import.meta.url).href;
+    // The one loader too (§0.295: the team's read) — over the org on screen, which `activate` sets as App does.
+    const loads = new URL('../src/utils/listLoads.js', import.meta.url).href;
     const wired = swap(swap(swap(swap(hookSrc, "from 'react';", `from "${react}";`), "from '../utils/storage';", `from "${storage}";`),
-        "from '../utils/settingsDefaults.js';", `from "${defaults}";`), "from '../utils/refusalWords.js';", `from "${words}";`);
+        "from '../utils/settingsDefaults.js';", `from "${defaults}";`), "from '../utils/refusalWords.js';", `from "${words}";`)
+        .replace("from '../utils/listLoads.js';", `from "${loads}";`);
     return (await import(dataUrl(wired))).useSettings;
 }
 
@@ -171,7 +175,7 @@ async function setup(t, { stored = {} } = {}) {
         get api() { return host.api; },
         // An org becomes active: its token first (App's getter effect runs
         // before its load effect), then the render that hands the hook the org.
-        activate(org) { env.tokenOrg = org; return host.render(org); },
+        activate(org) { env.tokenOrg = org; setRequestOrg(org); return host.render(org); },
         answer(url, org, body) { take(url, org).resolve({ ok: true, status: 200, json: async () => body }); },
         fail(url, org, status) { take(url, org).resolve({ ok: false, status, json: async () => ({}) }); },
         // Promise chains and renders settle, then the timers due by now fire —
@@ -222,7 +226,7 @@ test("a successful load records its org — and a change to the app's copy write
     assert.deepEqual(w.env.writes, [],
         'the screen that changed it saves its own keys; the hook PUT the whole object, every key as it was at sign-in, over newer saves');
     assert.deepEqual(w.api.settings.pipelines.map((p) => p.name), ['org_A pipeline', 'Renewals'], 'the copy still changes');
-    assert.deepEqual(Object.keys(w.api).sort(), ['loadSettings', 'setSettings', 'settings', 'settingsLoadError', 'settingsOrgId'],
+    assert.deepEqual(Object.keys(w.api).sort(), ['loadRoster', 'loadSettings', 'setSettings', 'settings', 'settingsLoadError', 'settingsOrgId'],
         'no save error, ready flag or unused handlers — nothing here saves');
 });
 
@@ -351,7 +355,7 @@ test("Settings opens only on the active org's own settings, rebuilt for each org
 });
 
 test('App loads the active org, and ends unsaved Settings edits on a switch', () => {
-    assert.ok(appSrc.includes('} = useSettings();'), 'the hook takes no org: it loads the one App names, and saves nothing (§0.170)');
+    assert.ok(appSrc.includes('} = useSettings({ reportLoad });'), 'the hook takes no org: it loads the one App names, and saves nothing (§0.170)');
     assert.ok(appSrc.includes('loadSettings(clerkUser, orgSwitched, organization?.id || null);'),
         'a load without its org loads nothing');
     assert.ok(/useEffect\(\(\) => \{\s*setSettingsDirty\(false\);\s*settingsSaveRef\.current = null;\s*\}, \[activeOrgId\]\);/.test(appSrc),

@@ -18,7 +18,8 @@ import {
 import OpportunityModal from '../modals/OpportunityModal';
 import ContactRail from '../rails/ContactRail';
 import ListsWait from '../ui/ListsWait.jsx';
-import { areRead, RECORD_LISTS, LEAD_LISTS } from '../../utils/listLoads.js';
+import { areRead, RECORD_LISTS, LEAD_LISTS, TEAM_LISTS } from '../../utils/listLoads.js';
+import { Unread } from '../ui/ListsGate.jsx';
 import AccountRail from '../rails/AccountRail';
 import TaskRail from '../rails/TaskRail';
 import UserModal from '../modals/UserModal';
@@ -145,15 +146,17 @@ export default function ModalLayer() {
         isMobile,
         escapeBlocked,
         // The lists the record windows read (state §0.294)
-        loads, recordWait,
-        setContactRailId, setShowDocLinkPicker, setDocLinkPickerContext, setMergeModal, setContactMergeModal, setViewingActivity, setMeetingPrepOpen, setMeetingPrepOppId,
+        loads, recordWait, retryLoads,
+        setContactRailId, setDocumentRailId, setShowUploadRail, setUploadRailContext, setShowDocLinkPicker, setDocLinkPickerContext, setMergeModal, setContactMergeModal, setViewingActivity, setMeetingPrepOpen, setMeetingPrepOppId,
     } = useApp();
 
-    // A record's window is drawn once the lists it reads were read (state §0.294; listLoads.js RECORD_LISTS, LEAD_LISTS): one
+    // A record's window is drawn once the lists it reads were read (state §0.294; listLoads.js RECORD_LISTS, LEAD_LISTS, TEAM_LISTS): one
     // asked for before that waits (ListsWait), and opens by itself when they are. Read once, they stay read — no open window
-    // is ever taken down. The team import reads none of them.
+    // is ever taken down. The team import waits for the team alone.
     const recordsRead = areRead(loads, RECORD_LISTS);
     const leadsRead = areRead(loads, LEAD_LISTS);
+    const teamRead = areRead(loads, TEAM_LISTS);
+    const claimsRead = areRead(loads, ['spiffClaims']);
     const csvReads = csvImportType !== 'users';
     // Close: each window that waits is let go, its seed with it (a task's, an activity's, a deal's), the rails' stack whole.
     const stopWaiting = () => {
@@ -167,6 +170,10 @@ export default function ModalLayer() {
             setQuickLogOpen(false); setMeetingPrepOpen(false); setMeetingPrepOppId(null);
         }
         if (!leadsRead) { setShowLeadModal(false); setShowLeadImportModal(false); }
+        if (!teamRead) {
+            if (!csvReads) setShowCsvImportModal(false);
+            setDocumentRailId(null); setShowUploadRail(false); setUploadRailContext(null);
+        }
     };
     const waiting = recordWait.length > 0;
 
@@ -483,7 +490,7 @@ export default function ModalLayer() {
 
             {/* ActivityModal replaced by ActivityRail */}
 
-            {showCsvImportModal && (recordsRead || !csvReads) && (
+            {showCsvImportModal && (csvReads ? recordsRead : teamRead) && (
                 <CsvImportModal
                     importType={csvImportType}
                     contacts={contacts}
@@ -1299,7 +1306,10 @@ export default function ModalLayer() {
                             </div>
                         )}
 
-                        {claimableSpiffs.length === 0 ? (
+                        {/* The claims decide what is left to claim (state §0.295): not read, none is offered, nor said claimed. */}
+                        {!claimsRead ? (
+                            <Unread loads={loads} lists={['spiffClaims']} onRetry={retryLoads}/>
+                        ) : claimableSpiffs.length === 0 ? (
                             <div style={{ textAlign:'center', padding:'2rem', color:T.inkMuted, fontSize:'0.875rem', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'8px' }}>
                                 All active SPIFFs have already been claimed for this deal.
                             </div>
@@ -1370,6 +1380,8 @@ export default function ModalLayer() {
                                                                     .catch(() => { /* the list as it was; a reload reads it */ });
                                                                 return;
                                                             }
+                                                            // Claimed already — this screen lacked it (state §0.295): the claim that holds it.
+                                                            if (refused?.code === 'claimed' && refused.spiffClaim) setSpiffClaims(prev => (prev.some(c => c.id === refused.spiffClaim.id) ? prev : [...prev, refused.spiffClaim]));
                                                             const why = refusalWords(res, refused);
                                                             setSpiffClaimError(heardRefusal(res.status, refused) ? `Claim not submitted — ${why}` : maybeSaid('The claim', 'submitted', why));
                                                             return;
@@ -1406,8 +1418,8 @@ export default function ModalLayer() {
             {recordsRead && <TaskRail />}
             {recordsRead && <ContactRail />}
             {recordsRead && <AccountRail />}
-            <DocumentRail />
-            <DocumentUploadRail />
+            {teamRead && <DocumentRail />}
+            {teamRead && <DocumentUploadRail />}
             {recordsRead && <DocumentLinkPicker />}
             {recordsRead && <MergeReviewModal />}
             {recordsRead && <ContactMergeReviewModal />}

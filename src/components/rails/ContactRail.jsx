@@ -12,6 +12,7 @@ import { activeDealsOf } from '../../utils/contactDeals.js';
 import DealPrepPicker from './DealPrepPicker';
 import HiddenLink from './HiddenLink';
 import { HIDDEN_ACCOUNT } from '../../utils/pickLink.js';
+import { unreadWords } from '../../utils/listLoads.js';
 import { standsFor } from '../../utils/pickLink.js';
 import { NO_LINK, contactSeed, contactCompany, linkedAccount, contactLogContext, outOfList } from '../../utils/railLinks.js';
 import { leaveOut } from '../../utils/leaveOut.js';
@@ -197,6 +198,7 @@ export default function ContactRail() {
         taskRailId: _taskRailId, setTaskRailId, taskRailMode: _taskRailMode, setTaskRailMode, setEditingTask,
         escapeBlocked,
         openMeetingPrep,
+        loads,   // an owner is named from the team, once it was read (state §0.295)
     } = useApp();
 
     // ── Resolve the contact being viewed/edited ───────────────────────────────
@@ -891,7 +893,7 @@ export default function ContactRail() {
                             </div>
                         ) : (
                             <div style={grid2}>
-                                <ReadRow label="Assigned Rep" value={ownerNameOf(formData, settings?.users, currentUserId, myProfile)} />
+                                <ReadRow label="Assigned Rep" value={ownerNameOf(formData, settings?.users, currentUserId, myProfile) || (formData.ownerId ? unreadWords(loads, ['users']) : '')} />
                                 <ReadRow label="Buyer Persona" value={formData.buyerPersona} />
                                 {formData.doNotContact && (
                                     <div style={{ gridColumn: '1 / -1', marginBottom: 10, background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '6px 10px', fontSize: 12, fontWeight: 600, color: T.danger }}>

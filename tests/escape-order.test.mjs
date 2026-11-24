@@ -323,7 +323,7 @@ const layersIn = (file, component) => {
     });
     assert.ok(ret, `${component} returns markup`);
     // A layer behind a wait for its lists (state §0.294) is the layer: the wait's name is passed over, left or right.
-    const WAITS = new Set(['recordsRead', 'leadsRead']);
+    const WAITS = new Set(['recordsRead', 'leadsRead', 'teamRead']);
     const first = (e) => (e.type === 'LogicalExpression' ? (first(e.left) ?? first(e.right)) : e.type === 'Identifier' ? (WAITS.has(e.name) ? null : e.name)
         : e.type === 'JSXElement' ? e.openingElement.name.name : null);
     const out = [];

@@ -22,29 +22,31 @@ export const LIST_NAMES = {
     tasks: 'tasks',
     activities: 'activities',
     leads: 'leads',
+    users: 'the team',
+    spiffClaims: 'SPIFF claims',
     documents: 'documents',
     quotes: 'quotes',
     products: 'the price book',
 };
 
 // The lists each tab draws from: it is drawn once every one was read (ListsGate). A tab that is not here draws on its
-// own — Documents says its own failure (docsError), Settings must open whatever failed (its panels that count a list wait:
-// PANEL_LISTS). tests/list-loads.test.mjs THE GUARD holds each to the lists its file takes from the app; NO_GATE there
+// own — Documents says its own failure (docsError), Settings must open whatever failed (its panels that count a list, or write to
+// the team, wait: PANEL_LISTS). tests/list-loads.test.mjs THE GUARD holds each to the lists its file takes from the app; NO_GATE there
 // names those a tab's file takes and needs no gate for, each with why.
 export const TAB_LISTS = {
-    home: ['opportunities', 'contacts', 'tasks', 'activities'],
-    pipeline: ['opportunities', 'activities'],
+    home: ['opportunities', 'contacts', 'tasks', 'activities', 'users'],
+    pipeline: ['opportunities', 'activities', 'users'],
     tasks: ['tasks', 'activities', 'opportunities', 'accounts', 'contacts'],
     accounts: ['accounts', 'opportunities', 'contacts', 'tasks', 'activities'],
     contacts: ['contacts', 'opportunities', 'accounts', 'tasks', 'activities'],
-    leads: ['leads'],
+    leads: ['leads', 'users'],
     quotes: ['quotes', 'products', 'opportunities'],
-    dispatch: ['accounts', 'opportunities'],
-    reports: ['opportunities', 'accounts', 'contacts', 'tasks', 'activities', 'leads'],
-    salesManager: ['opportunities', 'tasks', 'activities'],
+    dispatch: ['accounts', 'opportunities', 'users'],
+    reports: ['opportunities', 'accounts', 'contacts', 'tasks', 'activities', 'leads', 'users'],
+    salesManager: ['opportunities', 'tasks', 'activities', 'users', 'spiffClaims'],
 };
-// A technician's Dispatch waits for neither: the server answers them no account and no deal (crmReadScope), and their
-// day's jobs are Dispatch's own.
+// A technician's Dispatch waits for none of them: the server answers them no account and no deal (crmReadScope), their
+// day's jobs are Dispatch's own, and the team is the Technicians page's, which is not theirs.
 export const tabLists = (tab, { technician = false } = {}) => (tab === 'dispatch' && technician ? [] : TAB_LISTS[tab] || []);
 
 // The lists a record's window reads — a deal's, an account's, a contact's, a task's, an activity's, an import's, a merge's,
@@ -52,10 +54,13 @@ export const tabLists = (tab, { technician = false } = {}) => (tab === 'dispatch
 // opened before they were read waits (ModalLayer's ListsWait); opened over one that was not, it made duplicates of what it
 // never read and called a good link one you can't open. A list read once stays read, so no window waits again.
 export const RECORD_LISTS = ['opportunities', 'accounts', 'contacts', 'tasks', 'activities'];
-// A new lead's and the lead import's: their duplicates.
-export const LEAD_LISTS = ['leads', 'contacts'];
+// A new lead's and the lead import's: their duplicates, and whom the new lead goes to.
+export const LEAD_LISTS = ['leads', 'contacts', 'users'];
+// The team import's, and a document's rails: who is on the team already, and whom a document is shared with — one not read
+// sent an invitation again, and named a member "Former member", with an × to take them off.
+export const TEAM_LISTS = ['users'];
 // The lists the windows asked for and not yet drawn wait for — each once; none when nothing asked for waits. The team import
-// (a CSV import of users) reads none of them.
+// is a CSV import of users.
 export function waitsFor(loads, o) {
     const records = o.showModal || (o.showCsvImportModal && o.csvImportType !== 'users') || o.showActivityModal || o.taskRailId || o.contactRailId || o.accountRailId
         || o.showDocLinkPicker || o.mergeModal || o.contactMergeModal || o.viewingActivity || o.quickLogOpen || (o.meetingPrepOpen && o.meetingPrepEvent);
@@ -63,10 +68,15 @@ export function waitsFor(loads, o) {
     return [...new Set([
         ...(records && !areRead(loads, RECORD_LISTS) ? RECORD_LISTS : []),
         ...(leads && !areRead(loads, LEAD_LISTS) ? LEAD_LISTS : []),
+        ...(((o.showCsvImportModal && o.csvImportType === 'users') || o.documentRailId || o.showUploadRail) && !areRead(loads, TEAM_LISTS) ? TEAM_LISTS : []),
     ])];
 }
-// The Settings panels that count a list, or let a Delete by its count.
-export const PANEL_LISTS = { 'lead-scoring': ['leads'], 'account-segments': ['accounts'], 'buyer-personas': ['contacts'], industries: ['accounts'] };
+// The Settings panels that count a list, let a Delete by its count, or write to whom it lists: a team or a territory saved
+// or deleted over a team that was not read reached no member of it, and Export wrote a file of none.
+export const PANEL_LISTS = {
+    'lead-scoring': ['leads'], 'account-segments': ['accounts'], 'buyer-personas': ['contacts'], industries: ['accounts'],
+    users: ['users'], teams: ['users'], territories: ['users'], roles: ['users'], 'approval-tiers': ['users'], automations: ['users'],
+};
 
 // ── The state ────────────────────────────────────────────────────────────────
 // { org, lists: { [name]: { read, out, error, auth } } } — read: a load landed; out: one is out; error: the latest

@@ -13,12 +13,13 @@ import { buildSync } from 'esbuild';
 import { parse } from '@babel/parser';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { LIST_NAMES, TAB_LISTS, RECORD_LISTS, LEAD_LISTS, PANEL_LISTS, REPORT_LISTS, NO_LOADS, tabLists, loadsReducer, loadsOf, areRead, unreadOf, failedOf,
+import { LIST_NAMES, TAB_LISTS, RECORD_LISTS, LEAD_LISTS, TEAM_LISTS, PANEL_LISTS, REPORT_LISTS, NO_LOADS, tabLists, loadsReducer, loadsOf, areRead, unreadOf, failedOf,
     unreadWords, loadsBanner, waitsFor, readList } from '../src/utils/listLoads.js';
 import { SIGN_IN_WORDS } from '../src/utils/fetchStatus.js';
 import { setRequestOrg } from '../src/utils/storage.js';
 import { REPORT_SOURCES } from '../src/utils/reportQuery.js';
 import { planAccountImport } from '../src/utils/importLinks.js';
+import { healthChecksOf, unreadChecksOf } from '../src/utils/settingsCards.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
@@ -237,14 +238,15 @@ test('L7 — a window asked for before its lists were read waits: why, Try again
 
 test('L8 — the record windows: drawn only once the lists they read were read, never taken down after; what is asked for waits, and Close takes back each — pinned, and the wait RUN', () => {
     assert.deepEqual(RECORD_LISTS, ['opportunities', 'accounts', 'contacts', 'tasks', 'activities']);
-    assert.deepEqual(LEAD_LISTS, ['leads', 'contacts']);
+    assert.deepEqual(LEAD_LISTS, ['leads', 'contacts', 'users']);
+    assert.deepEqual(TEAM_LISTS, ['users']);
     // The harm the wait is for: over a list that was not read a file meets no duplicate.
     assert.deepEqual([planAccountImport([{ name: 'Shell' }], [2], []).conflicts.length, planAccountImport([{ name: 'Shell' }], [2], [{ id: 'a', name: 'Shell' }]).conflicts.length], [0, 1]);
     const m = code('src/components/layout/ModalLayer.jsx');
-    for (const l of ['{showModal && recordsRead && (\n                <OpportunityModal', '{showCsvImportModal && (recordsRead || !csvReads) && (\n                <CsvImportModal', '{showLeadModal && leadsRead && (\n                <LeadModal', '{showLeadImportModal && leadsRead && (\n                <LeadImportModal',
-        '{recordsRead && <ActivityRail />}', '{recordsRead && <TaskRail />}', '{recordsRead && <ContactRail />}', '{recordsRead && <AccountRail />}', '{recordsRead && <DocumentLinkPicker />}',
-        '{recordsRead && <MergeReviewModal />}', '{recordsRead && <ContactMergeReviewModal />}', '{recordsRead && <ActivityDetailDialogHost />}', '{waiting && <ListsWait lists={recordWait} onClose={stopWaiting}/>}', "const csvReads = csvImportType !== 'users';", 'const recordsRead = areRead(loads, RECORD_LISTS);', 'const leadsRead = areRead(loads, LEAD_LISTS);', 'const waiting = recordWait.length > 0;']) assert.equal(count(m, l), 1, `REGRESSION: ${l} — drawn over lists that were not read`);
-    for (const c of ['OpportunityModal', 'CsvImportModal', 'LeadModal', 'LeadImportModal', 'ActivityRail', 'TaskRail', 'ContactRail', 'AccountRail', 'DocumentLinkPicker', 'MergeReviewModal', 'ContactMergeReviewModal', 'ActivityDetailDialogHost']) assert.equal([...m.matchAll(new RegExp(`<${c}[\\s/]`, 'g'))].length, 1, `${c} drawn once`);
+    for (const l of ['{showModal && recordsRead && (\n                <OpportunityModal', '{showCsvImportModal && (csvReads ? recordsRead : teamRead) && (\n                <CsvImportModal', '{showLeadModal && leadsRead && (\n                <LeadModal', '{showLeadImportModal && leadsRead && (\n                <LeadImportModal',
+        '{recordsRead && <ActivityRail />}', '{recordsRead && <TaskRail />}', '{recordsRead && <ContactRail />}', '{recordsRead && <AccountRail />}', '{recordsRead && <DocumentLinkPicker />}', '{teamRead && <DocumentRail />}', '{teamRead && <DocumentUploadRail />}',
+        '{recordsRead && <MergeReviewModal />}', '{recordsRead && <ContactMergeReviewModal />}', '{recordsRead && <ActivityDetailDialogHost />}', '{waiting && <ListsWait lists={recordWait} onClose={stopWaiting}/>}', "const csvReads = csvImportType !== 'users';", 'const recordsRead = areRead(loads, RECORD_LISTS);', 'const leadsRead = areRead(loads, LEAD_LISTS);', 'const teamRead = areRead(loads, TEAM_LISTS);', "const claimsRead = areRead(loads, ['spiffClaims']);", 'const waiting = recordWait.length > 0;']) assert.equal(count(m, l), 1, `REGRESSION: ${l} — drawn over lists that were not read`);
+    for (const c of ['OpportunityModal', 'CsvImportModal', 'LeadModal', 'LeadImportModal', 'ActivityRail', 'TaskRail', 'ContactRail', 'AccountRail', 'DocumentLinkPicker', 'DocumentRail', 'DocumentUploadRail', 'MergeReviewModal', 'ContactMergeReviewModal', 'ActivityDetailDialogHost']) assert.equal([...m.matchAll(new RegExp(`<${c}[\\s/]`, 'g'))].length, 1, `${c} drawn once`);
     const app = code('src/App.jsx');
     assert.ok(app.includes('{recordsRead && <MeetingPrepPanel />}') && app.includes('{recordsRead && <QuickLogFab />}') && app.includes('const recordsRead = areRead(loads, RECORD_LISTS);'));
     // The wait itself: RUN over each way a window is asked for.
@@ -255,33 +257,39 @@ test('L8 — the record windows: drawn only once the lists they read were read, 
         for (const l of RECORD_LISTS) assert.deepEqual(waitsFor({ ...allRead(), [l]: FAILED('X.') }, o), RECORD_LISTS, `REGRESSION: ${JSON.stringify(o)} — asked for over ${l} that was not read, and nothing says why it does not open`);
         assert.deepEqual(waitsFor(allRead(), o), [], 'read: it opens');
     }
-    for (const o of [{ showLeadModal: true }, { showLeadImportModal: true }]) assert.deepEqual([waitsFor({ ...allRead(), contacts: FAILED('X.') }, o), waitsFor({ ...allRead(), leads: FAILED('X.') }, o), waitsFor(UNREAD, o)], [LEAD_LISTS, LEAD_LISTS, []], 'a lead window waits for its own lists alone');
-    assert.deepEqual(waitsFor({}, { showModal: true, showLeadModal: true }), [...RECORD_LISTS, 'leads'], 'two asked for: each list once');
-    assert.deepEqual([waitsFor(UNREAD, {}), waitsFor(UNREAD, { meetingPrepOpen: true }), waitsFor(UNREAD, { showCsvImportModal: true, csvImportType: 'users' })], [[], [], []], 'nothing asked for, nothing over the page; the team import reads none of them');
+    for (const o of [{ showLeadModal: true }, { showLeadImportModal: true }]) assert.deepEqual([...LEAD_LISTS.map((l) => waitsFor({ ...allRead(), [l]: FAILED('X.') }, o)), waitsFor(UNREAD, o)], [LEAD_LISTS, LEAD_LISTS, LEAD_LISTS, []], 'a lead window waits for its own lists alone');
+    assert.deepEqual(waitsFor({}, { showModal: true, showLeadModal: true }), [...RECORD_LISTS, 'leads', 'users'], 'two asked for: each list once');
+    const TEAM = { showCsvImportModal: true, csvImportType: 'users' };
+    for (const o of [{ documentRailId: 'doc_1' }, { showUploadRail: true }]) assert.deepEqual([waitsFor({ ...allRead(), users: FAILED('X.') }, o), waitsFor(UNREAD, o)], [TEAM_LISTS, []], 'whom a document is shared with');
+    assert.deepEqual([waitsFor(UNREAD, {}), waitsFor(UNREAD, { meetingPrepOpen: true }), waitsFor(UNREAD, TEAM), waitsFor({ ...UNREAD, users: FAILED('X.') }, TEAM)], [[], [], [], TEAM_LISTS], 'nothing asked for, nothing over the page; the team import waits for the team alone');
+    assert.deepEqual(waitsFor({ ...allRead(), users: FAILED('X.') }, { showCsvImportModal: true, csvImportType: 'accounts' }), [], 'no other import for it');
     // App asks it of every flag it knows, and the Escape order and ModalLayer read the one answer.
     const asked = app.slice(app.indexOf('const recordWait = waitsFor(loads, {'), app.indexOf('const openLayers = {'));
-    assert.deepEqual(asked.match(/\b(show\w+|csvImportType|\w+RailId|mergeModal|contactMergeModal|viewingActivity|quickLogOpen|meetingPrep\w+)\b/g).sort(), [...new Set([...OPENERS, { showLeadModal: 1 }, { showLeadImportModal: 1 }].flatMap(Object.keys))].sort(), 'REGRESSION: a window App opens the wait never hears of');
+    assert.deepEqual(asked.match(/\b(show\w+|csvImportType|\w+RailId|mergeModal|contactMergeModal|viewingActivity|quickLogOpen|meetingPrep\w+)\b/g).sort(), [...new Set([...OPENERS, { showLeadModal: 1 }, { showLeadImportModal: 1 }, { documentRailId: 1 }, { showUploadRail: 1 }].flatMap(Object.keys))].sort(), 'REGRESSION: a window App opens the wait never hears of');
     assert.ok(app.includes('        recordWait: recordWait.length > 0,') && app.includes('        recordWait, loads, retryLoads,'));
     // Close lets each window go as its own close does: RUN, whole.
     const body = m.slice(m.indexOf('    const stopWaiting = () => {'), m.indexOf('    };\n', m.indexOf('    const stopWaiting = () => {')) + 7);
     const SETS = [...new Set([...body.matchAll(/\b(set\w+)\(/g)].map((x) => x[1]))];
-    const close = (recordsRead, leadsRead, csvReads = true) => { const set = {}; new Function('recordsRead', 'leadsRead', 'csvReads', ...SETS, `${body}\nstopWaiting();`)(recordsRead, leadsRead, csvReads, ...SETS.map((k) => (v) => { set[k] = v; })); return set; };
+    const close = (recordsRead, leadsRead, csvReads = true, teamRead = true) => { const set = {}; new Function('recordsRead', 'leadsRead', 'csvReads', 'teamRead', ...SETS, `${body}\nstopWaiting();`)(recordsRead, leadsRead, csvReads, teamRead, ...SETS.map((k) => (v) => { set[k] = v; })); return set; };
     const RECORDS_CLOSED = { setShowModal: false, setNewDealSeed: null, setShowCsvImportModal: false, setShowActivityModal: false, setEditingActivity: null, setActivityInitialContext: null, setTaskRailId: null, setEditingTask: null, setContactRailId: null, setAccountRailId: null, setRailStack: [],
         setShowDocLinkPicker: false, setDocLinkPickerContext: null, setMergeModal: null, setContactMergeModal: null, setViewingActivity: null, setQuickLogOpen: false, setMeetingPrepOpen: false, setMeetingPrepOppId: null };
     assert.deepEqual(close(false, true), RECORDS_CLOSED, 'REGRESSION: Close leaves a window asked for, or its seed — the next new task opened as the one let go');
     assert.deepEqual(close(true, false), { setShowLeadModal: false, setShowLeadImportModal: false });
     const { setShowCsvImportModal, ...rest } = RECORDS_CLOSED;
     assert.deepEqual([close(false, true, false), setShowCsvImportModal], [rest, false], 'the team import stays open beside one that waits');
-    assert.deepEqual(close(true, true), {}, 'nothing waiting, Close takes nothing back');
+    const DOCS_CLOSED = { setDocumentRailId: null, setShowUploadRail: false, setUploadRailContext: null };
+    assert.deepEqual([close(true, true), close(true, true, true, false), close(true, true, false, false)], [{}, DOCS_CLOSED, { setShowCsvImportModal: false, ...DOCS_CLOSED }], 'nothing waiting, Close takes nothing back; what waits for the team, it does');
 });
 
-test('L9 — the Settings panels that count a list wait for it, each by its id', () => {
-    assert.deepEqual(PANEL_LISTS, { 'lead-scoring': ['leads'], 'account-segments': ['accounts'], 'buyer-personas': ['contacts'], industries: ['accounts'] });
+test('L9 — the Settings panels that count a list, or write to the team, wait for it, each by its id', () => {
+    assert.deepEqual(PANEL_LISTS, { 'lead-scoring': ['leads'], 'account-segments': ['accounts'], 'buyer-personas': ['contacts'], industries: ['accounts'],
+        users: ['users'], teams: ['users'], territories: ['users'], roles: ['users'], 'approval-tiers': ['users'], automations: ['users'] });
     const av = code('src/Tabs/AdminView.jsx');
-    for (const [id, comp, lists] of [['lead-scoring', 'LeadScoringDetail', 'leads'], ['account-segments', 'AccountSegmentsDetail', 'accounts'], ['buyer-personas', 'BuyerPersonasDetail', 'contacts'], ['industries', 'IndustriesDetail', 'accounts']]) {
+    for (const [id, comp, lists] of [['lead-scoring', 'LeadScoringDetail', 'leads'], ['account-segments', 'AccountSegmentsDetail', 'accounts'], ['buyer-personas', 'BuyerPersonasDetail', 'contacts'], ['industries', 'IndustriesDetail', 'accounts'], ['users', 'UsersDetail', 'users'], ['teams', 'TeamsDetail', 'users'], ['territories', 'TerritoriesDetail', 'users'],
+        ['roles', 'RolesDetail', 'users'], ['approval-tiers', 'ApprovalTiersDetail', 'users'], ['automations', 'AutomationsDetail', 'users']]) {
         assert.equal([...av.matchAll(new RegExp(`if \\(id === '${id}'\\)\\s+return <PanelGate id="${id}" onBack=\\{onBack\\}><${comp}\\s[^\\n]*/></PanelGate>;`, 'g'))].length, 1, `REGRESSION: ${comp} drawn over ${lists} that were not read`);
         assert.equal(count(av, `<${comp}`), 1);
-        assert.ok(read(`src/Tabs/settings/salesProcess/${comp}.jsx`).includes(lists), comp);
+        assert.ok(['salesProcess', 'people', 'quoting', 'integrations'].some((d) => { try { return read(`src/Tabs/settings/${d}/${comp}.jsx`).includes(lists); } catch { return false; } }), comp);
     }
 });
 
@@ -289,12 +297,13 @@ test('L9 — the Settings panels that count a list wait for it, each by its id',
 // What a tab takes from the app's lists (visibleX is X) must be in TAB_LISTS, or named here with why it needs no gate.
 const TAB_FILES = { home: 'HomeTab', pipeline: 'PipelineTab', tasks: 'TasksTab', accounts: 'AccountsTab', contacts: 'ContactsTab', leads: 'LeadsTab', quotes: 'QuotesTab', dispatch: 'DispatchTab', reports: 'ReportsTab', salesManager: 'SalesManagerTab' };
 const NO_GATE = {
+    'home spiffClaims': "its SPIFFs panel says claims that were not read (below)",
     'home accounts': "a pinned report's source or join alone — each says its own (REPORT_LISTS, pinned below)",
     'home leads': 'the same',
     'pipeline accounts': 'taken from the context and read nowhere',
     'pipeline contacts': 'taken from the context and read nowhere',
 };
-const UNGATED = { documents: 'says its own failed read (docsError, refusals-said 5d)', settings: 'must open whatever failed; its counting panels wait (L9)' };
+const UNGATED = { documents: 'says its own failed read (docsError, refusals-said 5d)', settings: 'must open whatever failed; its panels that count a list, or write to the team, wait (L9)' };
 const takenLists = (path) => {
     const ast = parse(read(path), { sourceType: 'module', plugins: ['jsx'] });
     const got = new Set();
@@ -310,7 +319,7 @@ const takenLists = (path) => {
     return [...got];
 };
 
-test('THE GUARD — every tab that draws from the app\'s lists is drawn through the gate, for every list its file takes, or the list is named with why it needs no gate; each list has a loader that reports and a Try again that reads it', () => {
+test('THE GUARD — every tab that draws from the app\'s lists is drawn through the gate, for every list its file takes, or the list is named with why it needs no gate; each list has a loader that reports and a Try again that reads it', async () => {
     const app = code('src/App.jsx');
     assert.deepEqual(Object.keys(TAB_LISTS).sort(), Object.keys(TAB_FILES).sort());
     for (const [tab, file] of Object.entries(TAB_FILES)) {
@@ -341,20 +350,27 @@ test('THE GUARD — every tab that draws from the app\'s lists is drawn through 
         for (const n of names) assert.ok(!new RegExp(`(?:const|let|var|function)\\s+${n}\\b|[{,]\\s*${n}\\s*[,}][^;]*?=\\s*(?:\\n\\s*)?use[A-Z]`).test(code(file).replace(/^import .*$/gm, '')), `REGRESSION: ${file} — ${n} is declared again`);
     }
     const retry = app.slice(app.indexOf('const retryLoads = (names) => {'), app.indexOf('const loadBanner ='));
-    const files = { opportunities: 'src/hooks/useOpportunities.js', accounts: 'src/hooks/useAccounts.js', contacts: 'src/hooks/useContacts.js', tasks: 'src/hooks/useTasks.js', activities: 'src/hooks/useActivities.js', leads: 'src/App.jsx', documents: 'src/hooks/useDocuments.js', quotes: 'src/hooks/useQuotes.js', products: 'src/hooks/useQuotes.js' };
+    const files = { opportunities: 'src/hooks/useOpportunities.js', accounts: 'src/hooks/useAccounts.js', contacts: 'src/hooks/useContacts.js', tasks: 'src/hooks/useTasks.js', activities: 'src/hooks/useActivities.js', leads: 'src/App.jsx', documents: 'src/hooks/useDocuments.js', quotes: 'src/hooks/useQuotes.js', products: 'src/hooks/useQuotes.js', users: 'src/hooks/useSettings.js', spiffClaims: 'src/App.jsx' };
     const main = app.slice(app.indexOf('const loadData = async () => {'), app.indexOf('loadSettings(clerkUser, orgSwitched'));
     for (const l of Object.keys(LIST_NAMES)) {
-        const loader = l === 'documents' ? 'documentsHook.loadDocuments' : `load${l[0].toUpperCase()}${l.slice(1)}`;
+        const loader = l === 'documents' ? 'documentsHook.loadDocuments' : l === 'users' ? '() => loadRoster()' : `load${l[0].toUpperCase()}${l.slice(1)}`;
         const body = code(files[l]); const i = body.indexOf(`readList('${l}', {`);
         assert.ok(i > 0 && /report: (deps|_deps)\.reportLoad|report: reportLoad/.test(body.slice(i, body.indexOf('});', i))), `REGRESSION: ${l}'s load reports nothing`);
         assert.ok(retry.includes(`${l}: ${l === 'products' ? '() => loadProducts()' : loader},`) || retry.includes(`${l}: ${loader} `) || retry.includes(`${l}: () => loadProducts(),`), `REGRESSION: Try again does not read ${l}`);
-        assert.equal(count(main, `${loader}();`), 1, `${l} loaded with the org`);
+        // With the org: the team with its settings (useSettings), the claims by their own effect (auth-gated-loads).
+        if (l !== 'users' && l !== 'spiffClaims') assert.equal(count(main, `${loader}();`), 1, `${l} loaded with the org`);
     }
     assert.ok(retry.includes('for (const n of names) loaders[n]?.();'));
-    const ran = []; const retryFn = new Function('loadOpportunities', 'loadAccounts', 'loadContacts', 'loadTasks', 'loadActivities', 'loadLeads', 'documentsHook', 'loadQuotes', 'loadProducts', `${retry}\nreturn retryLoads;`)(
-        ...['opportunities', 'accounts', 'contacts', 'tasks', 'activities', 'leads'].map((n) => () => ran.push(n)), { loadDocuments: () => ran.push('documents') }, () => ran.push('quotes'), (...a) => ran.push(`products${a.length}`));
+    const again = app.slice(app.indexOf('    const readAllAgain = (orgId) => {'), app.indexOf('    const loadBanner ='));
+    const did = [];
+    await quietly(async () => { new Function('retryLoads', 'LIST_NAMES', 'loadSettings', 'clerkUser', 'reloadCoachingNotes', `${again}\nreadAllAgain('org_a');`)((n) => did.push(n), LIST_NAMES, (...a) => did.push(a), 'me', () => { did.push('notes'); }); });
+    assert.deepEqual(did, [Object.keys(LIST_NAMES).filter((n) => n !== 'users'), ['me', false, 'org_a'], 'notes'], 'RUN: every list, the settings with the team, and the notes — nothing switched');
+    assert.equal(count(code('src/hooks/useSettings.js'), '        loadRoster(usersDelay);'), 1, 'the team read with the org\'s settings');
+    assert.ok(app.includes('        if (data?.joined) readAllAgain(meOrgId);\n        if (meLoadRef.current !== meLoad) return;\n') && app.includes('        if (prevOrgIdRef.current !== meOrgId) return;\n        if (data?.joined)'), 'REGRESSION: a first sign-in keeps the lists it was answered as no member');
+    const ran = []; const retryFn = new Function('loadOpportunities', 'loadAccounts', 'loadContacts', 'loadTasks', 'loadActivities', 'loadLeads', 'documentsHook', 'loadQuotes', 'loadProducts', 'loadRoster', 'loadSpiffClaims', `${retry}\nreturn retryLoads;`)(
+        ...['opportunities', 'accounts', 'contacts', 'tasks', 'activities', 'leads'].map((n) => () => ran.push(n)), { loadDocuments: () => ran.push('documents') }, () => ran.push('quotes'), (...a) => ran.push(`products${a.length}`), (...a) => ran.push(`users${a.length}`), () => ran.push('spiffClaims'));
     retryFn(Object.keys(LIST_NAMES)); retryFn(['no such list']);
-    assert.deepEqual(ran.sort(), ['accounts', 'activities', 'contacts', 'documents', 'leads', 'opportunities', 'products0', 'quotes', 'tasks'], 'RUN: each list by its own loader, the price book the active products alone');
+    assert.deepEqual(ran.sort(), ['accounts', 'activities', 'contacts', 'documents', 'leads', 'opportunities', 'products0', 'quotes', 'spiffClaims', 'tasks', 'users0'], 'RUN: each list by its own loader, the price book the active products alone');
     // The banner: no ✕ — what it says stands until it is read.
     const banner = app.slice(app.indexOf('{loadBanner && ('), app.indexOf('<nav className="nav-tabs">'));
     assert.ok(banner.includes('onClick={() => retryLoads(loadBanner.failed)} disabled={loadBanner.trying}') && count(banner, '<button') === 1 && !banner.includes('✕'));
@@ -376,7 +392,7 @@ const SAYS_ITS_OWN = {
     'src/components/documents/DocumentRail.jsx': 'one document by its id, from a list that names it', 'src/Tabs/DocumentsTab.jsx': 'docsError (refusals-said 5d)',
     'src/components/modals/OpportunityModal.jsx': "a deal's quotes, said (below); its lists are the window's props",
     'src/components/layout/AppHeader.jsx': 'the search and the bell, said (below)',
-    'src/components/layout/ModalLayer.jsx': 'hands the lists to the windows it draws once they were read (L8); the reminders show a task that stands in the list',
+    'src/components/layout/ModalLayer.jsx': 'hands the lists to the windows it draws once they were read (L8); the claim window waits inside itself (below); the reminders show a task that stands in the list',
     'src/Tabs/DuplicateScanView.jsx': "the scan's own request; the list is its rescan key", 'src/Tabs/ContactDuplicateScanView.jsx': 'the same',
 };
 const WHOLE = { 'src/Tabs/settings/integrations/AutomationsDetail.jsx': "a run's record named from the lists; one not in them shows its id" };
@@ -400,6 +416,99 @@ test('THE GUARD, class-wide — every file that takes a list from the app is dra
         for (const l of taken) assert.ok(COVERED[file].includes(l), `REGRESSION: ${file} takes ${l}, which it is drawn before`);
     }
     for (const file of [...Object.keys(COVERED), ...Object.keys(SAYS_ITS_OWN)]) assert.ok(seen.includes(file), `${file}: gone, or takes no list now — take its name out`);
+});
+
+// The team is read of the settings copy (settings.users), not destructured: every file that does is held until it was read,
+// or named with what it does over a team that was not.
+const TEAM_HELD = ['src/Tabs/HomeTab.jsx', 'src/Tabs/DispatchTab.jsx', 'src/components/documents/DocumentRail.jsx', 'src/components/documents/DocumentUploadRail.jsx', 'src/utils/documentPeople.js', 'src/Tabs/LeadsTab.jsx', 'src/Tabs/PipelineTab.jsx', 'src/Tabs/ReportsTab.jsx', 'src/Tabs/SalesManagerTab.jsx', 'src/components/modals/LeadModal.jsx', 'src/Tabs/settings/people/RolesDetail.jsx', 'src/Tabs/settings/people/TeamsDetail.jsx',
+    'src/Tabs/settings/people/TerritoriesDetail.jsx', 'src/Tabs/settings/people/UsersDetail.jsx', 'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx', 'src/Tabs/settings/integrations/AutomationsDetail.jsx', 'src/utils/reportScope.js'];
+const TEAM_NAMED = {
+    'src/App.jsx': 'the Viewing bar\'s names and filters: none to pick, none applied', 'src/Tabs/AccountsTab.jsx': 'an owner filter\'s names', 'src/Tabs/AdminView.jsx': 'the cards and the check, as read (cardSettings)',
+    'src/utils/settingsCards.js': 'the same: no team counts nothing, and passes no check (settings-cards)',
+    'src/Tabs/QuotesTab.jsx': 'an approver\'s name by id',
+    'src/components/layout/AppHeader.jsx': 'a comment, and a rename of one row', 'src/components/layout/ModalLayer.jsx': 'handed to the team import, which waits (TEAM_LISTS)',
+    'src/components/modals/CoachingNoteDialog.jsx': 'whom a note is to: none to pick, none sent', 'src/components/modals/OpportunityModal.jsx': 'a rep picker: none to pick, the one stored kept', 'src/components/rails/AccountRail.jsx': 'the same',
+    'src/components/rails/ContactRail.jsx': 'the same; an owner named from it says a team that was not read (below)', 'src/components/rails/TaskRail.jsx': 'the same', 'src/Tabs/settings/dispatch/DispatchCrewsDetail.jsx': 'a comment: it reads the technicians',
+};
+test('THE GUARD — every file that reads the team of the settings copy is held until it was read, or named with what it does instead', () => {
+    const walk = (d) => readdirSync(new URL(d, ROOT), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${d}${e.name}/`) : /\.jsx?$/.test(e.name) ? [d + e.name] : []));
+    const reads = walk('src/').filter((f) => /settings\?*\.users\b/.test(read(f)));
+    assert.deepEqual(reads.filter((f) => !TEAM_HELD.includes(f) && !TEAM_NAMED[f]), [], 'REGRESSION: a screen reads the team and nothing holds it until it was read');
+    for (const f of [...TEAM_HELD, ...Object.keys(TEAM_NAMED)]) assert.ok(reads.includes(f), `${f}: gone, or reads no team now — take its name out`);
+    for (const t of ['leads', 'pipeline', 'reports', 'salesManager', 'home', 'dispatch']) assert.ok(TAB_LISTS[t].includes('users'), t);
+    assert.ok(code('src/components/rails/ContactRail.jsx').includes("|| (formData.ownerId ? unreadWords(loads, ['users']) : '')} />"), 'REGRESSION: an owned contact reads as nobody\'s over a team that was not read');
+    const av = code('src/Tabs/AdminView.jsx');
+    assert.ok(av.includes("const cardSettings = areRead(loads, ['users']) ? settings : { ...settings, users: undefined };") && av.includes("failedOf(loads, ['users']).length ? { ...liveCounts, unread: [...(liveCounts.unread || []), 'teams'] } : liveCounts;") && av.includes('<V2Card key={it.id} item={it} settings={cardSettings}'));
+    const healthy = (users) => healthChecksOf({ users, pipelines: [1] }, {}).find((c) => c.id === 'teams');
+    assert.deepEqual([healthy(undefined), healthy([])?.ok, healthy([{ name: 'A', team: 'T' }])?.ok, healthy([{ name: 'A' }])?.ok], [undefined, true, true, false], 'REGRESSION: a team that was not read passes "Team members assigned"');
+    assert.deepEqual(unreadChecksOf({ unread: ['teams', 'jobs'] }).map((c) => c.id), ['jobs', 'teams'], 'in the tile\'s order');
+    assert.deepEqual(unreadChecksOf({ unread: ['teams'] }), [{ id: 'teams', label: 'Team members assigned' }]);
+});
+
+test('SPIFF claims that were not read: the claim window opens and waits, offering none and saying none claimed; Home says it; a claim another member filed is taken from the refusal', () => {
+    const app = code('src/App.jsx');
+    const fn = app.slice(app.indexOf('    const promptSpiffClaim = (opp) => {'), app.indexOf('\n    };', app.indexOf('    const promptSpiffClaim = (opp) => {')) + 7);
+    const ask = (loads, spiffClaims) => { const did = []; const r = new Function('areRead', 'loads', 'settings', 'spiffClaims', 'setSpiffClaimContext', 'setShowSpiffClaimModal', `${fn}\nreturn promptSpiffClaim;`)(
+        areRead, loads, { spiffs: [{ id: 's', active: true }] }, spiffClaims, (v) => did.push(v.opp.id), (v) => did.push(v))({ id: 'd', stage: 'Closed Won' }); return [r, did]; };
+    const CLAIMED = [{ opportunityId: 'd', spiffId: 's' }];
+    assert.deepEqual([ask(allRead(), CLAIMED), ask(allRead(), []), ask({}, []), ask({ spiffClaims: FAILED('X.') }, CLAIMED)], [[false, []], [true, ['d', true]], [true, ['d', true]], [true, ['d', true]]], 'claimed, as read: no dead end; not read: the window waits');
+    const m = code('src/components/layout/ModalLayer.jsx');
+    assert.ok(m.includes("                        {!claimsRead ? (\n                            <Unread loads={loads} lists={['spiffClaims']} onRetry={retryLoads}/>\n                        ) : claimableSpiffs.length === 0 ? ("), 'REGRESSION: a SPIFF claimed already is offered over claims that were not read');
+    assert.ok(m.includes("if (refused?.code === 'claimed' && refused.spiffClaim) setSpiffClaims(prev => (prev.some(c => c.id === refused.spiffClaim.id) ? prev : [...prev, refused.spiffClaim]));"));
+    const home = code('src/Tabs/HomeTab.jsx');
+    assert.ok(home.includes("unread={unreadWords(loads, ['spiffClaims'])}") && home.includes('{unread && <div role="status"') && home.includes('{mine.length > 0 && !unread && ('));
+});
+
+test('the team\'s load as useSettings has it — RUN: its rows to the settings copy, the 500 ms of a switch waited, a failure reported and the roster held left as it is', async () => {
+    const src = code('src/hooks/useSettings.js');
+    const i = src.indexOf('    const rosterGen = useRef(0);'); const body = src.slice(i, src.indexOf('\n    });', i) + 8);
+    const go = async (answer, delay) => {
+        const t = tracker(); const did = { order: [], copy: { a: 1, users: ['held'] } };
+        const load = new Function('useRef', 'readList', 'dbFetch', 'setSettings', 'deps', 'waitForToken', 'setTimeout', `${body}\nreturn loadRoster;`)(
+            (v) => ({ current: v }), readList, async (u) => { did.order.push(u); return answer; }, (f) => { did.copy = f(did.copy); }, { reportLoad: t.report }, async () => { did.order.push('token'); }, (r, ms) => { did.order.push(ms); r(); });
+        setRequestOrg('org_a'); await quietly(() => (delay === undefined ? load() : load(delay))); setRequestOrg(null);
+        return { ...did, e: t.loads().users };
+    };
+    assert.deepEqual(await go(ok('users', [{ id: 'u' }]), 500), { order: ['token', 500, '/.netlify/functions/users'], copy: { a: 1, users: [{ id: 'u' }] }, e: READ });
+    // Two out, the second answered first: the count is the team's own, held across loads.
+    {
+        const hs = [held(), held()]; let n = 0; const took = [];
+        const load = new Function('useRef', 'readList', 'dbFetch', 'setSettings', 'deps', 'waitForToken', 'setTimeout', `${body}\nreturn loadRoster;`)((v) => ({ current: v }), readList, () => hs[n++].read(), (f) => took.push(f({}).users), {}, async () => {}, (r) => r());
+        setRequestOrg('org_a'); const p = [load(), load()]; await settle();
+        hs[1].land(ok('users', ['second'])); await settle(); hs[0].land(ok('users', ['first'])); await Promise.all(p); setRequestOrg(null);
+        assert.deepEqual(took, [['second']], 'REGRESSION: an older roster lands over the newer — a first sign-in\'s over the one read again');
+    }
+    assert.deepEqual(await go(refused(502)), { order: ['token', 0, '/.netlify/functions/users'], copy: { a: 1, users: ['held'] }, e: FAILED('The server returned 502.') }, 'REGRESSION: a refused roster is silent');
+});
+
+test('the notes read again — RUN: an answer a later read overtook, or for another org, dropped; a failed re-read said, for the org that asked', async () => {
+    const src = code('src/hooks/useCoachingNotes.js');
+    const a = src.indexOf('    const loadGen = useRef(0);'), b = src.indexOf('    useEffect(() => {'); const c = src.indexOf('    const reloadSaid = useCallback('), d = src.indexOf('    }, [reload]);', c) + 17;
+    const { requestOrg, stillOrg } = await import('../src/utils/storage.js');
+    const { readRefusal, failureWords } = await import('../src/utils/refusalWords.js');
+    const make = (open) => { const did = { notes: [], errors: [] }; const go = new Function('useRef', 'useCallback', 'requestOrg', 'stillOrg', 'dbFetch', 'URL', 'readRefusal', 'failureWords', 'setCoachingNotes', 'setCoachingNotesLoaded', 'setCoachingNotesError', `${src.slice(a, b)}\n${src.slice(c, d)}\nreturn reloadSaid;`)(
+        (v) => ({ current: v }), (f) => f, requestOrg, stillOrg, open, '/n', readRefusal, failureWords, (v) => did.notes.push(v), () => {}, (v) => did.errors.push(v)); return { did, go }; };
+    setRequestOrg('org_a');
+    const hs = [held(), held()]; let n = 0;
+    const two = make(() => hs[n++].read());
+    const p = [two.go(), two.go()]; await settle();
+    hs[1].land(ok('coachingNotes', ['theirs'])); await settle(); hs[0].land(ok('coachingNotes', [])); await Promise.all(p);
+    assert.deepEqual([two.did.notes, two.did.errors], [[['theirs']], ['']], 'REGRESSION: the notes answered to no one land over a first sign-in\'s own');
+    // Overtaken as it fails: a refusal, a request that never left, an answer that cannot be read, one overtaken as it is read.
+    const late = { refusal: refused(502), 'a throw': new TypeError('Failed to fetch'), unreadable: { ok: true, status: 200, json: async () => { throw new SyntaxError('<'); } } };
+    for (const [what, answer] of Object.entries(late)) {
+        const h = [held(), held()]; let k = 0; const m = make(() => h[k++].read()); const q = [m.go(), m.go()]; await settle();
+        h[1].land(ok('coachingNotes', ['theirs'])); await settle(); h[0].land(answer); await Promise.all(q);
+        assert.deepEqual([m.did.notes, m.did.errors], [[['theirs']], ['']], `REGRESSION: ${what} — an overtaken failure said over the notes read since`);
+    }
+    { let m; let k = 0; m = make(async () => (k++ ? ok('coachingNotes', ['theirs']) : { ok: true, status: 200, json: async () => { await m.go(); return { coachingNotes: [] }; } })); await m.go();
+        assert.deepEqual(m.did.notes, [['theirs']], 'REGRESSION: overtaken while its answer was read'); }
+    const failed = make(async () => refused(502)); await failed.go();
+    assert.deepEqual([failed.did.notes, failed.did.errors], [[], ['The server returned 502.']], 'REGRESSION: a failed re-read is none');
+    const left = make(async () => { setRequestOrg('org_b'); return refused(502); }); await left.go();
+    assert.deepEqual([left.did.notes, left.did.errors], [[], []], 'another org\'s failure is not said');
+    setRequestOrg(null);
+    assert.ok(src.includes('reloadCoachingNotes: reloadSaid,'));
 });
 
 test('the loads T16 does not run — the quotes, the price book, the library, the leads: each its own rows to its own setter, its own count of loads, the price book the active products — RUN as written', async () => {
@@ -448,12 +557,13 @@ test('the loads T16 does not run — the quotes, the price book, the library, th
     for (const [src, n] of [[q, 'quotesGen'], [q, 'productsGen'], [d, 'docsGen'], [a, 'leadsGen']]) { assert.equal([...src.matchAll(new RegExp(`const ${n} = (?:React\\.)?useRef\\(0\\);`, 'g'))].length, 1); assert.equal(count(src, `gen: ${n},`), 1, `${n}: its own load's alone`); }
     // A switch: the emptied lists unread, and a quote's link the Quotes tab has not taken is the last org's.
     const clear = cutOf(a, 'if (listsOrgRef.current && listsOrgRef.current !== organization.id) {', 'listsOrgRef.current = organization.id;');
-    assert.ok(clear.includes('resetLoads(organization.id);') && clear.includes('setQuotesDeepLinkOppId(null);'));
+    assert.ok(clear.includes('resetLoads(organization.id);') && clear.includes('setQuotesDeepLinkOppId(null);') && clear.includes('setSpiffClaims([]);'));
+    assert.equal(count(a, 'setSpiffClaims([])'), 1, 'REGRESSION: the claims emptied where they still read as read');
 });
 
 test('a technician\'s Dispatch; a saved report\'s lists are named for each source, whole', () => {
     assert.deepEqual([tabLists('reports', { technician: true }), tabLists('settings'), tabLists('reports').includes('leads')], [TAB_LISTS.reports, [], true], 'Reports waits for the leads whatever the Leads feature: a saved report reads them');
-    assert.deepEqual([tabLists('dispatch'), tabLists('dispatch', { technician: true })], [['accounts', 'opportunities'], []], 'the server answers a technician no account and no deal: their day waits for neither');
+    assert.deepEqual([tabLists('dispatch'), tabLists('dispatch', { technician: true })], [['accounts', 'opportunities', 'users'], []], 'the server answers a technician no account and no deal: their day waits for none of them');
     assert.deepEqual(Object.keys(REPORT_LISTS).sort(), [...REPORT_SOURCES].sort());
     assert.deepEqual(REPORT_LISTS, { Opportunities: ['opportunities', 'accounts'], Accounts: ['accounts', 'opportunities', 'activities'], Leads: ['leads'], Activity: ['activities', 'opportunities', 'accounts'] });
     for (const l of Object.values(REPORT_LISTS).flat()) assert.ok(l in LIST_NAMES, l);

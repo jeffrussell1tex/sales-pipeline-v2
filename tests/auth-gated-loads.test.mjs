@@ -38,11 +38,13 @@ test('spiff claims: no load before an org is active; reloaded per org, the previ
     assert.ok(start > 0, 'the effect is labelled');
     const block = app.slice(start, app.indexOf('}, [activeOrgId]);', start) + '}, [activeOrgId]);'.length);
     assert.ok(block.includes("if (!activeOrgId) return;                 // spiff claims: signed in with an org, or nothing"), 'the gate');
-    assert.ok(block.includes('setSpiffClaims(prev => (prev.length ? [] : prev));'), 'a switch clears the last org\'s claims before the new load');
-    assert.ok(block.includes('setSpiffClaims(prev =>') && block.indexOf('setSpiffClaims(prev =>') < block.indexOf('if (!activeOrgId) return;'), 'cleared before the gate, so a sign-out empties them too');
-    assert.ok(block.includes("dbFetch('/.netlify/functions/spiff-claims')"), 'the same endpoint');
-    assert.ok(block.includes('.then(r => (r.ok ? r.json() : null))'), 'a refused response is not parsed as claims');
-    assert.ok(block.includes('return () => { cancelled = true; };'), 'a load in flight when the org changes is dropped');
+    // Moved in §0.295: emptied with the other lists, where they are unread (the tracker keeps a list read until then — emptied
+    // here, an org that went and came back showed none as none).
+    const clear = app.slice(app.indexOf('if (listsOrgRef.current && listsOrgRef.current !== organization.id) {'), app.indexOf('listsOrgRef.current = organization.id;'));
+    assert.ok(clear.includes('setSpiffClaims([]);') && clear.includes('resetLoads(organization.id);'), 'a switch clears the last org\'s claims before the new load');
+    // Moved in §0.295: the one loader (readList) — its ok check first, an answer for another org or overtaken dropped.
+    assert.ok(block.includes('        loadSpiffClaims();\n'), 'the loader');
+    assert.ok(app.includes("const loadSpiffClaims = () => readList('spiffClaims', {\n        read: () => dbFetch('/.netlify/functions/spiff-claims'),\n        take: setSpiffClaims, gen: claimsGen, report: reportLoad, wait: waitForToken,"), 'the same endpoint, after the token');
     assert.ok(block.trimEnd().endsWith('}, [activeOrgId]);'), 'keyed on the org, not on mount');
     assert.doesNotMatch(app, /spiff-claims'\)\s*\n\s*\.then\(r => r\.json\(\)\)/, 'the mount-only load is gone');
 });

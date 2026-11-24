@@ -1,9 +1,10 @@
 import { db } from '../../db/index.js';
-import { spiffClaims } from '../../db/schema.js';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { spiffClaims, opportunities } from '../../db/schema.js';
+import { eq, and, ne, desc, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, auditAs, resolveCaller } from './_lib.mjs';
 import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
+import { claimRefused, rowLock } from './_lib.mjs';   // a batch its claim aborted (22012); the row it holds meanwhile (§0.295)
 import { checkLinks } from './_links.mjs';
 
 // A claim's deal and its SPIFF (state §0.204 — Jeff, 15 Oct: "Any of this org's, refuse"): a deal of this org,
@@ -24,6 +25,22 @@ const sameName = (a, b) => {
 // the NOT NULL (a 500). Anything else is not blank: an object or a number is the link check's to refuse (a SPIFF
 // that is no id is 400), never String()'s to throw on.
 const blankText = (v) => (typeof v === 'string' ? !v.trim() : !v);
+
+// One claim for a deal and a SPIFF (state §0.295), whatever state it is in — as the claim window offers none over it. The
+// screen's copy of the claims alone decided it: one that did not load, or a press a moment after another member's, filed a
+// second claim, to be approved and paid twice. The create, and a save that moves the pair, open with these: the deal's row locked, so of
+// two at once one waits for the other; then the whole batch aborts (1 / 0) while another claim of this org's holds the
+// pair. A claim with no deal has nothing to claim twice; a deal deleted since has no row to lock, nor a press to offer it.
+const pairOf = (orgId, opportunityId, spiffId, id) => and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.opportunityId, opportunityId), eq(spiffClaims.spiffId, spiffId), ne(spiffClaims.id, id));
+const pairFree = (orgId, { id, opportunityId, spiffId }) => (blankText(opportunityId) ? [] : [
+    rowLock(opportunities, opportunityId, orgId),
+    db.execute(sql`select 1 / (case when exists (select 1 from ${spiffClaims} where ${pairOf(orgId, opportunityId, spiffId, id)}) then 0 else 1 end)`),
+]);
+// …and the refusal: the claim that holds it handed back, so the screen that lacked it has it.
+const alreadyClaimed = async (orgId, { id, opportunityId, spiffId }) => {
+    const [held] = await db.select().from(spiffClaims).where(pairOf(orgId, opportunityId, spiffId, id)).limit(1);
+    return { statusCode: 409, headers, body: JSON.stringify({ error: 'This SPIFF is already claimed for this deal.', code: 'claimed', ...(held ? { spiffClaim: held } : {}) }) };
+};
 
 // A status a manager sets names the event (§0.143); a rep's edit is an update.
 const CLAIM_STATUS_ACTIONS = Object.freeze({ approved: 'spiff_claim.approved', rejected: 'spiff_claim.rejected', paid: 'spiff_claim.paid' });
@@ -109,9 +126,18 @@ export const handler = async (event) => {
             const linked = await checkLinks(CLAIM_LINKS, claim, null, orgId);
             if (linked.error) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };
             // An id another org holds writes nothing — answered, not crashed on the key (state §0.204).
-            const [inserted] = await db.insert(spiffClaims)
-                .values({ ...claim, orgId })
-                .onConflictDoNothing({ target: spiffClaims.id }).returning();
+            // Its deal's SPIFF claimed already is refused, nothing written (state §0.295) — after the same press sent again,
+            // whose own claim holds it: that one landed (idInUse, below).
+            let inserted;
+            try {
+                const done = await db.batch([...pairFree(orgId, claim), db.insert(spiffClaims)
+                    .values({ ...claim, orgId })
+                    .onConflictDoNothing({ target: spiffClaims.id }).returning()]);
+                [inserted] = done.at(-1);
+            } catch (e) {
+                if (!claimRefused(e)) throw e;
+                if (!(await ownIdTaken(spiffClaims, claim.id, orgId))) return await alreadyClaimed(orgId, claim);
+            }
             // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
             // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
             if (!inserted && await ownIdTaken(spiffClaims, claim.id, orgId)) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That claim id is already in use.', code: 'idInUse' }) };
@@ -187,13 +213,30 @@ export const handler = async (event) => {
             // approved, rejected or paid since is not moved again, nor a second press after the first landed.
             const seen = Object.hasOwn(data, 'fromStatus') ? sql`coalesce(nullif(${spiffClaims.status}, ''), 'pending') = ${data.fromStatus || 'pending'}` : undefined;
             // Update-only (state §0.204): a claim deleted while this save was out is not found — the upsert put it back.
-            const [updated] = await db.update(spiffClaims).set({ ...named, updatedAt: new Date() })
-                .where(and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.id, id), stillTheirs, seen))
-                .returning();
+            // A save that moves it onto a deal and SPIFF another claim holds is refused whole (state §0.295); one that leaves
+            // its pair as stored — an approval, a note — is never asked, a pair stored twice before the rule included.
+            const pair = { id, opportunityId: clean.opportunityId, spiffId: clean.spiffId };
+            const movesPair = clean.opportunityId !== existing.opportunityId || clean.spiffId !== existing.spiffId;
+            // A save that names either half holds the pair as read in its write: the check was of the half it names beside the
+            // other as read — moved since, the row is touched by nothing, and said as changed (below).
+            const pairAsRead = ['opportunityId', 'spiffId'].some((k) => Object.hasOwn(named, k))
+                ? and(sql`${spiffClaims.opportunityId} is not distinct from ${existing.opportunityId}`, eq(spiffClaims.spiffId, existing.spiffId))
+                : undefined;
+            let updated;
+            try {
+                const done = await db.batch([...(movesPair ? pairFree(orgId, pair) : []), db.update(spiffClaims).set({ ...named, updatedAt: new Date() })
+                    .where(and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.id, id), stillTheirs, seen, pairAsRead))
+                    .returning()]);
+                [updated] = done.at(-1);
+            } catch (e) {
+                if (!claimRefused(e)) throw e;
+                return await alreadyClaimed(orgId, pair);
+            }
             if (!updated) {
                 // Touched nothing: the claim as it stands now decides (state §0.276), nothing written — gone: the 404; for
                 // a rep, approved or another rep's since the check: the check's own words; else it changed since it was
-                // read (its status since the screen's copy, or its rep's spelling since the check): said, with what it is.
+                // read (its status since the screen's copy, its rep's
+                // spelling since the check, or its deal or SPIFF since it, §0.295 — the words name its status alone): said, with what it is.
                 const [now] = await db.select().from(spiffClaims).where(and(eq(spiffClaims.id, id), eq(spiffClaims.orgId, orgId)));
                 if (!now) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };
                 if (isRep && (now.status || 'pending') !== 'pending') return { statusCode: 403, headers, body: JSON.stringify({ error: 'A claim can only be edited while it is pending.' }) };

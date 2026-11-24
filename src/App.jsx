@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { readList, tabLists, loadsBanner, areRead, waitsFor, RECORD_LISTS } from './utils/listLoads.js';
+import { readList, tabLists, loadsBanner, areRead, waitsFor, RECORD_LISTS, LIST_NAMES } from './utils/listLoads.js';
 import { useListLoads } from './hooks/useListLoads.js';
 import ListsGate from './components/ui/ListsGate.jsx';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
@@ -316,8 +316,8 @@ function App() {
     // the keys it owns, so there is no background save to report on here.
     const {
         settings, setSettings,
-        loadSettings, settingsOrgId, settingsLoadError,
-    } = useSettings();
+        loadSettings, loadRoster, settingsOrgId, settingsLoadError,
+    } = useSettings({ reportLoad });
 
     // A failed settings load leaves the defaults on screen, and nothing saves
     // settings until a load succeeds (state §0.162) — say so, or every pipeline,
@@ -428,6 +428,11 @@ function App() {
         setLeads(prev => prev.map(l => (l.id === leadId ? (stored || { ...l, status: 'Converted' }) : l)));
     };
     const [spiffClaims, setSpiffClaims] = React.useState([]);
+    const claimsGen = React.useRef(0);
+    const loadSpiffClaims = () => readList('spiffClaims', {
+        read: () => dbFetch('/.netlify/functions/spiff-claims'),
+        take: setSpiffClaims, gen: claimsGen, report: reportLoad, wait: waitForToken,   // whether they were read (state §0.295)
+    });
 
     // Offer the SPIFF claim modal for a Closed Won deal, but only when there
     // is actually something claimable — opening it to say "all claimed" is a
@@ -440,7 +445,8 @@ function App() {
         const claimed = new Set(
             spiffClaims.filter(c => c.opportunityId === opp.id).map(c => c.spiffId)
         );
-        if (!active.some(s => !claimed.has(s.id))) return false;
+        // Claims that were not read say nothing of what is claimed (state §0.295): the window opens, and waits for them.
+        if (areRead(loads, ['spiffClaims']) && !active.some(s => !claimed.has(s.id))) return false;
         setSpiffClaimContext({ opp });
         setShowSpiffClaimModal(true);
         return true;
@@ -535,7 +541,7 @@ function App() {
     // drops an answer for an org no longer on screen (stillOrg).
     if (listsOrgRef.current && listsOrgRef.current !== organization.id) {
         setOpportunities([]); setAccounts([]); setContacts([]); setTasks([]); setActivities([]);
-        setLeads([]); documentsHook.setDocuments([]); setQuotes([]); setProducts([]);
+        setLeads([]); documentsHook.setDocuments([]); setQuotes([]); setProducts([]); setSpiffClaims([]);   // another org's rows never survive a switch
         resetLoads(organization.id);   // an emptied list was not read (state §0.294)
         setQuotesDeepLinkOppId(null);  // a quote's link the Quotes tab has not taken yet is the last org's
     }
@@ -570,6 +576,10 @@ const meStill = () => meLoadRef.current === meLoad && prevOrgIdRef.current === m
 readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
     .then(data => {
         if (prevOrgIdRef.current !== meOrgId) return;
+        // Their row here was linked, made or saved just now (state §0.295; users.mjs says so): what was asked beside it may
+        // have been answered for no member of this org — short, or empty, or a rep's — and read as read. All of it is read again, whichever load this was: the
+        // later load's lists may have been asked before the link too.
+        if (data?.joined) readAllAgain(meOrgId);
         if (meLoadRef.current !== meLoad) return;
         // Deactivated in this org (§0.164): every request here is refused.
         setAccessRevokedOrg(data?.deactivated ? meOrgId : null);
@@ -761,38 +771,20 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
 
     // Spiff claims: once signed in with an active org, and again per org (§0.125).
     useEffect(() => {
-        setSpiffClaims(prev => (prev.length ? [] : prev));   // another org's claims never survive a switch
         if (!activeOrgId) return;                 // spiff claims: signed in with an org, or nothing
-        let cancelled = false;
-        const askedOrg = requestOrg();
-        const load = async () => {
-            await waitForToken();
-            if (cancelled) return;
-            dbFetch('/.netlify/functions/spiff-claims')
-                .then(r => (r.ok ? r.json() : null))
-                .then(data => { if (!cancelled && stillOrg(askedOrg) && data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
-                .catch(err => console.warn('spiff-claims load error:', err.message));
-        };
-        load();
-        return () => { cancelled = true; };
-    }, [activeOrgId]);
+        loadSpiffClaims();
+    }, [activeOrgId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     // And again each time a merge or its Undo reads the lists again (state §0.218; useMerge's listsRead): an account
     // merge renames the claims on its deals, and its Undo names them back — a list kept from before showed the old name.
-    // An answer a later read overtook is dropped (the cleanup), and so is one for an org switched away from.
+    // An answer a later read overtook is dropped (the loader's count), and so is one for an org switched away from.
     useEffect(() => {
         if (!listsRead || !activeOrgId) return;
-        let cancelled = false;
-        const askedOrg = requestOrg();
-        dbFetch('/.netlify/functions/spiff-claims')
-            .then(r => (r.ok ? r.json() : null))
-            .then(data => { if (!cancelled && stillOrg(askedOrg) && data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
-            .catch(err => console.warn('spiff-claims load error:', err.message));
-        return () => { cancelled = true; };
+        loadSpiffClaims();
     }, [listsRead]); // eslint-disable-line react-hooks/exhaustive-deps -- the org's own load is the effect above
 
     // Coaching notes (state §0.82) — the server returns only what this caller may see.
-    const { coachingNotes, coachingNotesError, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken, orgId: activeOrgId });
+    const { reloadCoachingNotes, coachingNotes, coachingNotesError, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken, orgId: activeOrgId });
 
 
 
@@ -1019,8 +1011,15 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
         const loaders = {
             opportunities: loadOpportunities, accounts: loadAccounts, contacts: loadContacts, tasks: loadTasks, activities: loadActivities,
             leads: loadLeads, documents: documentsHook.loadDocuments, quotes: loadQuotes, products: () => loadProducts(),
+            users: () => loadRoster(), spiffClaims: loadSpiffClaims,
         };
         for (const n of names) loaders[n]?.();
+    };
+    // Everything the app read with the org (state §0.295): the lists, the settings (the team with them) and the notes.
+    const readAllAgain = (orgId) => {
+        retryLoads(Object.keys(LIST_NAMES).filter(n => n !== 'users'));
+        loadSettings(clerkUser, false, orgId);
+        reloadCoachingNotes();
     };
     const loadBanner = loadsBanner(loads);
     // A tab, once the lists it draws from were read.
@@ -1668,7 +1667,7 @@ readMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)
     // before the early returns, so the ref always holds this render's.
     // A record's window asked for before the lists it reads were read (state §0.294): ModalLayer's ListsWait stands in for it.
     const recordWait = waitsFor(loads, { showModal, showCsvImportModal, csvImportType, showActivityModal, taskRailId, contactRailId, accountRailId, showDocLinkPicker,
-        mergeModal, contactMergeModal, viewingActivity, quickLogOpen, meetingPrepOpen, meetingPrepEvent, showLeadModal, showLeadImportModal });
+        mergeModal, contactMergeModal, viewingActivity, quickLogOpen, meetingPrepOpen, meetingPrepEvent, showLeadModal, showLeadImportModal, documentRailId, showUploadRail });
     const openLayers = {
         recordWait: recordWait.length > 0,
         coachingNote: !!coachingNoteModal, blockedDelete: !!blockedDeleteModal, prompt: !!promptModal, confirm: !!confirmModal,

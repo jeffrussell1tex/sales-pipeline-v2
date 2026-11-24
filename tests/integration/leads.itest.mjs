@@ -115,8 +115,8 @@ before(async () => {
         { id: OTHER, clerkUserId: null,     name: 'Itest Other', email: 'other@itest.local', role: 'User', orgId: A },
     ]);
     // BOTH users-table caches, cleared together (see invalidateRoster's
-    // comment in _lib): the caller cache stores a MISS as { id: null } for
-    // 30s, so any resolution racing this seed would leave org A's caller
+    // comment in _lib): the caller cache stored a MISS as { id: null } for
+    // 30s until §0.295, so any resolution racing this seed would leave org A's caller
     // owning nothing for the rest of the run — every rep test failing closed
     // with no error anywhere.
     invalidateRoster();

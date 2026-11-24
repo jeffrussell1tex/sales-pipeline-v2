@@ -99,7 +99,7 @@ before(async () => {
     await cleanup();
     // One resolvable rep so salesRep-name stamping is deterministic. Both
     // users-table caches cleared together (the leads suite's lesson: a cached
-    // MISS lasts 30s and fails every later resolution closed).
+    // MISS lasted 30s until §0.295 and failed every later resolution closed).
     await db.insert(users).values([
         { id: REP_A, clerkUserId: 'u_' + A, name: 'Itest Opp Rep', email: 'opp-rep@itest.local', role: 'User', orgId: A },
     ]);

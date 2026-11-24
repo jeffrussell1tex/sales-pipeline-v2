@@ -3101,10 +3101,10 @@ own lead" with no error anywhere near the actual cause.
   starts seeding `users` (or any other constrained shared table) takes its
   own prefix at the same moment.
 - **Seed roster rows in `before()`, then call `invalidateRoster()`** — the
-  caller cache stores a MISS as `{id: null}` for 30s, so a resolution racing
-  the seed leaves the caller owning nothing for the rest of the run, failing
-  closed with no error (§0.41 grew the invalidation for production; tests
-  need it for the same reason).
+  caller cache stored a MISS as `{id: null}` for 30s until §0.295, so a
+  resolution racing the seed left the caller owning nothing for the rest of
+  the run, failing closed with no error (§0.41 grew the invalidation for
+  production); a name or an id kept from before still needs it.
 - **Exact-count assertions on "sees nothing" tests must state their premise
   in a comment** (the leads null-caller test asserts zero rows and says why
   every org-B row is unassigned by construction). An unstated premise is the
@@ -3695,7 +3695,8 @@ by lengthening the wait.
 
 **The check:** `tests/auth-gated-loads.test.mjs` pins the gate, its position
 after the active-session user and the token getter's effect, each of the three
-effects' gate / clear / deps, and `waitForToken`'s behaviour and loud give-up;
+effects' gate / clear / deps (the SPIFF claims' clear is the main load's
+switch since §0.295), and `waitForToken`'s behaviour and loud give-up;
 five mutants. Before adding a fetch that runs on mount: does it key on
 `activeOrgId`? If it must run signed-out (a public route), it does not go
 through `dbFetch`.
@@ -4936,11 +4937,14 @@ THE GUARD: tests/failed-reads.test.mjs (every function as every role, the caller
 
 **Origin (§0.294, 24 Nov 2026 — OPEN_ITEMS §4.2's two Mediums; Jeff: "Keep working").** A record list whose load failed stayed `[]`: the screens drew "No accounts yet", an import met no duplicate and made them, the account picker offered Create for a name that exists, and the banner about it was taken down by the next list that landed.
 
-1. **The app's lists load through one loader** (`readList`, src/utils/listLoads.js), each with its own count of loads held across renders: an answer for another org or one overtaken sets and reports nothing; the rows are set, then said read; a refusal in the house words, a failure in plain ones, an answer with no list a failure. A new list gets a name in `LIST_NAMES`, a loader, a line in App's loadData and in `retryLoads`.
+1. **The app's lists load through one loader** (`readList`, src/utils/listLoads.js), each with its own count of loads held across renders: an answer for another org or one overtaken sets and reports nothing; the rows are set, then said read; a refusal in the house words, a failure in plain ones, an answer with no list a failure. A new list gets a name in `LIST_NAMES`, a loader asked with the org (App's loadData; the team in loadSettings, the SPIFF claims in their own effect — §0.295) and a line in `retryLoads`. Eleven since §0.295.
 2. **A list is READ once a load of it landed in the org on screen** (useListLoads), and stays read there; its latest failure stands beside that. Ask by name (`areRead`, `unreadWords`), never by the list's length — a failed list can hold the one row made on it — and never over another org's state (`loadsOf`); an emptied list is unread (`resetLoads`).
-3. **A tab is drawn once every list it draws from was read** (`TAB_LISTS`, ListsGate); a Settings panel that counts a list likewise (`PANEL_LISTS`, PanelGate). A tab that is not gated says its own.
-4. **A record's window is drawn once the lists it reads were read** (`RECORD_LISTS`, `LEAD_LISTS`; ModalLayer, `waitsFor`): one asked for before waits (ListsWait), never drawn with its words patched one by one — that was tried and leaked. Its Close lets each window go, its seed with it (the rails' stack emptied whole). Being read is never undone, so nothing open is taken down.
+3. **A tab is drawn once every list it draws from was read** (`TAB_LISTS`, ListsGate); a Settings panel that counts a list, or writes to the team, likewise (`PANEL_LISTS`, PanelGate). The team is read of the settings copy (`settings.users`): a file that does is held until it was read, or named (THE GUARD, §0.295). A tab that is not gated says its own.
+4. **A record's window is drawn once the lists it reads were read** (`RECORD_LISTS`, `LEAD_LISTS`, `TEAM_LISTS`; ModalLayer, `waitsFor`; the SPIFF claim window waits inside itself): one asked for before waits (ListsWait), never drawn with its words patched one by one — that was tried and leaked. Its Close lets each window go, its seed with it (the rails' stack emptied whole). Being read is never undone, so nothing open is taken down.
 5. **The banner stands while any list's latest load failed**, naming the lists; each leaves it by its own next load. Try again reads those lists alone, never App's whole loadData (it would read the settings, the roster and the profile again too).
 6. **An export, a figure, a duplicate check or a blocked delete never runs over a list that was not read** — it sits behind a gate or a wait, or says the list was not read.
+7. **What was asked as nobody is asked again** (§0.295): users?me says `joined` — their row here was linked, made or saved in this request or the last two minutes (a save of it reads the lists once more than needed) — and App reads every list, the settings, the team and the notes again (`readAllAgain`), whichever load it was. A caller with no row is never cached (resolveCaller, as verifyAuth's).
+8. **A list is emptied only where it is unread**: in App's switch, beside `resetLoads` (the team by loadSettings' own reset, while it is unread) — emptied elsewhere it still reads as read, and none is none.
+9. **A rule the screen's copy of a list decides is the server's too when it costs money** (§0.295, Jeff, 24 Nov: "Keep working"): one claim for a deal and a SPIFF — the deal's row locked, then the batch aborted while another claim of the org's holds the pair (`rowLock`, `pairFree`); a save that names a half holds the pair as read.
 
-THE GUARD: tests/list-loads.test.mjs (each tab's file against TAB_LISTS; every file under src/ that takes a list through useApp() held by its tab, window or panel, or named with its reason; no name taken from the tracker declared again in App or ModalLayer — one was, and App crashed on its first render with every suite green).
+THE GUARD: tests/first-sign-in.test.mjs (rule 7: `joined`, the miss never cached), tests/integration/spiff-double.itest.mjs (rule 9) and tests/list-loads.test.mjs (every file that reads `settings.users` held or named; each tab's file against TAB_LISTS; every file under src/ that takes a list through useApp() held by its tab, window or panel, or named with its reason; no name taken from the tracker declared again in App or ModalLayer — one was, and App crashed on its first render with every suite green).

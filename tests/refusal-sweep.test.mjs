@@ -2472,6 +2472,7 @@ const coachingHook = () => builtCoaching || (builtCoaching = (() => {
     const body = s.slice(s.indexOf("const URL = '/.netlify/functions/coaching-notes';")).replace('export function useCoachingNotes', 'function useCoachingNotes');
     return new Function('useState', 'useEffect', 'useCallback', 'dbFetch', 'requestOrg', 'stillOrg', 'readRefusal', 'failureWords', 'console',
         'refusalWords', 'heardRefusal', 'landedBefore',   // §0.261
+        'useRef',   // §0.295: the load's own count
         `${body}\nreturn useCoachingNotes;`);
 })());
 const NOTE = Object.freeze({ id: 'cn_1', text: 'Strong call', readBy: [] });
@@ -2491,7 +2492,7 @@ const coaching = async ({ answers = [], orgId = 'org_a', switchOrg = null, initi
             if (a instanceof Error) throw a;
             return a;
         },
-        () => org, (o) => o === org, readRefusal, failureWords, quiet, refusalWords, heardRefusal, landedBefore)({ orgId, waitForToken: async () => {} });
+        () => org, (o) => o === org, readRefusal, failureWords, quiet, refusalWords, heardRefusal, landedBefore, (v) => ({ current: v }))({ orgId, waitForToken: async () => {} });
     await settle();
     const [notes, , error] = cells;
     if (initial && !switchOrg) notes.set(initial);
@@ -2622,9 +2623,9 @@ test('Part 7b: WIRING — the hook reads ok first and never rejects; App hands o
     order(effect, "setCoachingNotesError('');", 'const askedOrg = requestOrg();', 'await reload();', '} catch (err) {',
         'if (!cancelled && stillOrg(askedOrg)) setCoachingNotesError(failureWords(err));');
     assert.ok(!effect.includes('console.warn'), 'REGRESSION: a failed load said only to the console');
-    assert.ok(hook.includes('return { coachingNotes, coachingNotesLoaded, coachingNotesError, reloadCoachingNotes: reload, addCoachingNote, markCoachingNoteRead, deleteCoachingNote };'));
+    assert.ok(hook.includes('return { coachingNotes, coachingNotesLoaded, coachingNotesError, reloadCoachingNotes: reloadSaid, addCoachingNote, markCoachingNoteRead, deleteCoachingNote };'));
     const app = read('src/App.jsx');
-    assert.ok(app.includes('const { coachingNotes, coachingNotesError, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken, orgId: activeOrgId });'));
+    assert.ok(app.includes('const { reloadCoachingNotes, coachingNotes, coachingNotesError, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken, orgId: activeOrgId });'));
     assert.ok(between(app, 'const appContextValue = {', '\n    };').includes('coachingNotes, coachingNotesError, addCoachingNote, markCoachingNoteRead, deleteCoachingNote,'), 'handed to the screens');
     const said = "Coaching notes couldn't be loaded ({coachingNotesError}). Reload the page to try again.";
     const home = code(read('src/Tabs/HomeTab.jsx'));
@@ -4220,7 +4221,7 @@ test('Part 9f: an unread check is one whose read failed — never one that does 
 
 test('Part 9f: WIRING — AdminView names the unread under the score with the checks\' isHidden; Needs attention draws allClearOf\'s words alone', () => {
     const av = code(read('src/Tabs/AdminView.jsx'));
-    order(av, 'const activeHealthChecks = healthChecksOf(settings, liveCounts, isHidden);', 'const unreadChecks   = unreadChecksOf(liveCounts, isHidden);',
+    order(av, 'const activeHealthChecks = healthChecksOf(cardSettings, liveCounts, isHidden);', 'const unreadChecks   = unreadChecksOf(checkCounts, isHidden);',
         'const unreadSentence = unreadSentenceOf(unreadChecks);', 'const allClear       = allClearOf(hiddenCount, unreadChecks.length);');
     order(between(av, 'WORKSPACE HEALTH</div>', '{/* Needs attention */}'), '{healthOk} of {activeHealthChecks.length} checks passing</div>', '{health.sentence}</div>',
         '{unreadSentence && (', '>{unreadSentence}</div>');
@@ -9989,7 +9990,7 @@ const p12fxLSettingsLoad = (() => {
     return async ({ answer, held = false, newer = false }) => {
         if (!built) {
             const s = code(read(P12FXL_SETTINGS));
-            const chain = between(s, "        dbFetch('/.netlify/functions/settings')", '\n\n        waitForToken()');
+            const chain = between(s, "        dbFetch('/.netlify/functions/settings')", '\n\n        loadRoster(usersDelay);');
             built = new Function('dbFetch', 'readRefusal', 'failureWords', 'loadGenRef', 'gen', 'settingsAsLoaded', 'setSettings', 'settingsOrgRef',
                 'orgId', 'setSettingsOrgId', 'setLoadError', 'console', `return ${chain.trim()}`);
         }
@@ -12984,7 +12985,7 @@ test('Part 12 fixes, round 4 (G4): WIRING — THE GUARD\'s floors are the counts
     const iii = between(s, "test('(iii) under src/,", "test('(iii) self-test (§0.248)");
     // Moved in §0.287: 192 -> 228, 187 -> 188 — refusals-said's floors raised to the counts measured 23 Nov (a floor with room
     // to spare passes a deletion: the scoped run's survivor).
-    assert.ok(p12fxG4Floor(iii, 'assert.ok(reads >= ') >= 220, 'REGRESSION: scan (iii)\'s floor below the 220 body reads measured 24 Nov (§0.294: the nine list loads read through the one loader)');
+    assert.ok(p12fxG4Floor(iii, 'assert.ok(reads >= ') >= 217, 'REGRESSION: scan (iii)\'s floor below the 217 body reads measured 24 Nov (§0.295; 220 in §0.294: the nine list loads read through the one loader)');
     assert.ok(p12fxG4Floor(iii, 'assert.ok(SWEPT.length >= ') >= P12FXG4_SOURCES, 'REGRESSION: scan (iii) no longer held at the 242 sources under src/');
     order(iii, 'for (const f of SWEPT) {', 'assert.ok(SWEPT.length >= ', 'assert.ok(reads >= ');
     const iv = between(s, "test('(iv) in the files the sweep owns", "test('(iv) self-test");
@@ -13596,7 +13597,7 @@ test('Part 12 fixes, last pass (F4): WIRING — one test of the server\'s own re
 // operand logged; nothing written), and set to the count: only the number moved. A floor written `>` holds one under
 // the count (`files.length > 241` holds the 242 sources under src/; `> 347` the 348 under src/ and netlify/functions/);
 // a floor inside a loop holds the least of its rounds (app-links' templates 11 of 21/11/12; audit-close's tables, the
-// schema 21 columns, the shaper 14 reads). refusals-said's five (126, 242, 192, 54, 188; (iii) 228 since §0.287) and this file's (242, 242, 6)
+// schema 21 columns, the shaper 14 reads). refusals-said's five (126, 242, 192, 54, 188; (iii) 217 since §0.295) and this file's (242, 242, 6)
 // were re-measured after this pass and already stood at their counts (G4 holds them). This test holds every floor this
 // pass raised: lowered, it fails here — say the new count, and why, in both places.
 const P12FXG5_FLOORS = [

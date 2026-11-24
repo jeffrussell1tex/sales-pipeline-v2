@@ -2501,7 +2501,12 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Fixed in §0.294 (BUILT 24 Nov; guide §18b139).** **A failed load of the record lists and the price book draws an empty list** (§0.248, 12 Nov — Part 10's builder and the review's rule lens; read in code; older): useAccounts', useActivities', useContacts' and useTasks' loads, and useOpportunities' deals load, throw `'HTTP ' + r.status` into a console-only catch — the member sees dbStatusOf's banner on a refusal, and nothing on a request that never left or a 200 that cannot be read, the list left empty; useQuotes' `loadProducts` returns silently on a refusal (`if (!res.ok || !stillOrg(askedOrg)) return;`), so a failed read of the price book draws "No products yet. Click "+ Add product" …" (QuotesTab.jsx) and the builder "No products in the price book yet.", and `loadQuotes`' catch is console-only too. Against the house rule that a read that failed is never "none" (§0.247). Outside Parts 10-11's design; a batch of its own — each load's error said where its list is drawn. Medium.
 - **The Sales Manager's commission and SPIFF saves judge a refusal on words rebuilt from a string** (§0.249, 13 Nov — the last pass's verifier (F4); read in code; contrived bodies): `saveExtra` reads `writeSettings`' answer, whose words `refusalOf` (src/utils/storage.js) has already composed — it tests `body?.error` for truthiness and appends ` (ref <requestId>)` without checking that the error is a string — and `saidOf` (SalesManagerTab.jsx) turns them back into a body for `ownRefusal`. So a 4xx whose error is blank or not a string but which carries a `requestId` reads as the server's own refusal and says "Not saved — …" (400 `{ error: '   ', requestId: 'r1' }` the blank and the ref; 422 `{ error: { message: 'x' }, requestId: 'r1' }` "[object Object] (ref r1)"), where the maybe sentence is the rule. settings.mjs's own 4xx carry no `requestId`, so no answer seen has the shape. Recommended: `refusalOf` takes only a non-blank string error, or `writeSettings` hands back the body as well as the words. Low.
 - **A quiet activity save's thrown failure answers nothing** (§0.249, 13 Nov — Part 12c's builder; read in code; older): useActivities' `saveActivity` (src/hooks/useActivities.js) answers a refusal `{ ok: false, status, error, field }`, but its edit's and create's catches answer `undefined` after `setActivityModalError(failureWords(err))` — and a quiet save (the task rail's completion notes, `QUIET_RAIL`) drops that setter, so the caller has no words of the failure: TaskRail's `said()` falls back to Q4's "The server could not be reached." whatever threw. Recommended: the catches answer `{ ok: false, status: 0, error: failureWords(err) }`. Low.
-- **Left by §0.294** (24 Nov; its map and reviews; read in code; none fixed):
+- **Left by §0.295** (24 Nov; its reviews; read in code; none fixed):
+  (a) the roster cache behind names (`_lib.mjs` orgRoster, 30 s a warm function) does not know a member whose row another function just made: what they make naming themselves in that moment can be stored with no owner, an import refused (Low; older);
+  (b) a row another tab, or an Admin's sync, made between the lists and users?me is a join for two minutes by the row's last write — one written longer before is not (Low);
+  (c) a PUT's refusal for a pair moved since says the claim's status changed; its pair did (Low; no screen moves a pair);
+  (d) **a question for Jeff**: a rejected claim still holds its deal's SPIFF, as the claim window always showed — a rep files again only once a Manager deletes it (Low).
+- **Left by §0.294** (24 Nov; its map and reviews; read in code; (a), (b) and (c) fixed in §0.295, BUILT 24 Nov):
   (a) **the team roster is not one of the tracked lists** (useSettings' users read answers a refusal or a throw in silence): with it unread, deleting a team or a territory clears no member, renaming a territory leaves them on the old name (a territory is held by name), the team import and Invite meet no member (an invitation sent again), Export members writes an empty file, a new lead goes to nobody (Medium);
   (b) **SPIFF claims load in silence** (App.jsx, `r.ok ? json : null`): unread, a deal already claimed is offered again and the server has no check per deal, SPIFF and rep — a second pending claim (Medium);
   (c) **an invited member's first sign-in reads short lists that count as read**: the lists are asked beside users?me, before it links their row, and nothing reads them again (Medium);
@@ -3026,7 +3031,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Found by the profile batch** (26 Oct, its map and design —
   docs/design/profile-batch/DESIGN.md §1; read in code, not run):
   - The page shows the member as the roster held them at sign-in: only
-    Sync reads the roster again (P21; useSettings.js:116 loads it once; Sync, UsersDetail.jsx:1529). Jeff's
+    Sync (since §0.295 Try again and a first sign-in too) reads the roster again (P21; useSettings.js loadRoster loads it once; Sync, UsersDetail.jsx:1529). Jeff's
     "Your change wins" (Q1) left a fresh read on open undone.
   - Phone shows Mobile when Phone is empty, so clearing Phone shows Mobile
     again (P22; UsersDetail.jsx:1263).
@@ -3617,7 +3622,7 @@ to add meetings. Nothing in the app adds a meeting to Google:
   history (`|| !owner`, :5110). The team half (:5084, "or are on the team
   for"; :5088-5089) never runs: a rep's `settings.users` is the directory,
   `{ id, name, active }` with no team (users.mjs:514-516;
-  useSettings.js:116-128), so `myTeam` is the rep alone (:5087) — and the
+  useSettings.js loadRoster), so `myTeam` is the rep alone (:5087) — and the
   server sends a rep no teammate's row anyway. The tab's own gate is by
   name too: a rep's `myTeamMembers` is `new Set([currentUserName])`
   (:119-135), which `oppInScope`, `actInScope` and `taskInScope` test
@@ -4018,8 +4023,9 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **A SPIFF claim's amount is the client's figure.** §0.169 (c). And the
   rest of what a claim trusts (the 4b-2 map, 15 Oct; Jeff: "file (3)"):
   the server takes the body's amount, multiplier, deal name and ARR; it
-  does not require the rep's own Closed Won deal, an active SPIFF, or one
-  not already claimed on that deal; a rep may re-point their pending
+  does not require the rep's own Closed Won deal, an active SPIFF, ~~or one
+  not already claimed on that deal~~
+    (DONE in §0.295: a re-point onto a pair another claim holds is refused too); a rep may re-point their pending
   claim's deal and SPIFF. Also: the claims list keeps its own copy after
   an approve; a Manager's list is the claims named for their own team's
   reps on the screen only (since §0.204, "Narrow to their team") — the

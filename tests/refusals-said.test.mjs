@@ -587,7 +587,7 @@ const CLEANED = [
     'src/hooks/useTasks.js', 'src/hooks/useUserHandlers.js', 'src/hooks/useMerge.js', 'src/components/modals/LeadModal.jsx',
     'src/components/rails/AccountPicker.jsx', 'src/components/modals/OpportunityModal.jsx', 'src/Tabs/DuplicateScanView.jsx',
     'src/Tabs/ContactDuplicateScanView.jsx', 'src/Tabs/PastMerges.jsx',
-    'src/utils/listLoads.js',   // §0.294: the app's nine list loads, one loader
+    'src/utils/listLoads.js',   // §0.294: the app's list loads (eleven since §0.295), one loader
     // Part 11 (§0.248): Dispatch's remaining reads and words — every save and read in DispatchTab.jsx reads the ok check
     // first and says the house words (a 403 the role's sentence, Q13), every catch failureWords; the service plans panel
     // likewise. Two loads read their bodies after an ok check made through a `.filter` the scan cannot see: each read is
@@ -705,7 +705,8 @@ test('(iii) under src/, no body is read before its response\'s ok check, unless 
     // 228 since §0.287 (23 Nov): re-measured — the body reads the batches since §0.249 added. At 192 the floor had 36 to
     // spare, and a floor with room passes a deletion (the scoped run's survivor passed owner-writes' at one to spare).
     // 220 since §0.294: the nine list loads' reads are the one loader's (listLoads.js readList).
-    assert.ok(reads >= 220, `the scan sees the body reads (${reads}) — fewer means it lost its shape`);
+    // 217 since §0.295: the team's and the SPIFF claims' loads likewise.
+    assert.ok(reads >= 217, `the scan sees the body reads (${reads}) — fewer means it lost its shape`);
     for (const b of BODY_FIRST) assert.equal(lineCount[`${b.file} ${b.text}`], 1, `${b.file}: the named text "${b.text}" is one line of its file — a second would pass under its name`);
     const named = (x) => BODY_FIRST.some((b) => b.file === x.file && b.text === x.text);
     const unnamed = found.filter((x) => !named(x));

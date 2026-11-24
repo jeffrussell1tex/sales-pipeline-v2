@@ -177,7 +177,7 @@ test("§0.276 THE GUARD: a SPIFF claim's save writes only what it names; a rep's
     assert.ok(put.includes('const stillTheirs = isRep\n                ? and(eq(spiffClaims.repName, existing.repName), eq(spiffClaims.status, existing.status))\n                : undefined;'), 'its rep and status as the check read them — for a rep alone');
     assert.ok(put.includes("const seen = Object.hasOwn(data, 'fromStatus') ? sql`coalesce(nullif(${spiffClaims.status}, ''), 'pending') = ${data.fromStatus || 'pending'}` : undefined;"), 'the status a screen saw, held');
     assert.ok(put.includes("if (Object.hasOwn(data, 'fromStatus') && typeof data.fromStatus !== 'string') return { statusCode: 400,"), 'a status is text');
-    assert.ok(put.includes('.where(and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.id, id), stillTheirs, seen))'), 'in the write\'s own WHERE');
+    assert.ok(put.includes('.where(and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.id, id), stillTheirs, seen, pairAsRead))'), 'in the write\'s own WHERE');
     const missed = between(put, '            if (!updated) {\n', '\n            }\n');
     assert.ok(missed.includes("const [now] = await db.select().from(spiffClaims).where(and(eq(spiffClaims.id, id), eq(spiffClaims.orgId, orgId)));"), 'a missed write reads the claim again, in this org');
     const order = ['if (!now) return { statusCode: 404,', "if (isRep && (now.status || 'pending') !== 'pending') return { statusCode: 403, headers, body: JSON.stringify({ error: 'A claim can only be edited while it is pending.' }) };",

@@ -342,7 +342,8 @@ export function healthChecksOf(settings, liveCounts = {}, isHidden = () => false
         if (c) checks.push(c);
     }
     checks.push({ id: 'pipelines', label: 'Default pipeline set', ok: pipelines.length > 0 });
-    checks.push({ id: 'teams', label: 'Team members assigned', ok: users.filter(u => u.team).length === users.filter(u => u.name).length });
+    // A team that was not read passes nothing (state §0.295): none of none assigned read as every member assigned.
+    if (Array.isArray(settings?.users)) checks.push({ id: 'teams', label: 'Team members assigned', ok: users.filter(u => u.team).length === users.filter(u => u.name).length });
     checks.push({ id: 'quote-brand', label: 'Quote branding configured', ok: !!settings?.quoteBrand });
     return checks;
 }
@@ -372,6 +373,7 @@ const UNREAD_CHECKS = [
     ['webhooks', 'Webhooks all healthy', true],
     ['backup', 'Backups running', false],
     ['jobs', 'Scheduled jobs', true],   // the jobs check's label names its verdict; unread there is none
+    ['teams', 'Team members assigned', false],   // the team was not read (state §0.295)
 ];
 
 /** The Health checks a failed read left out — [{ id, label }] in the tile's order; none while the reads are out. */

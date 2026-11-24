@@ -31,7 +31,7 @@ test('ensureRosterRow: our id, the Clerk id in its column, a rep\'s role but for
     assert.ok(s.includes("            id: 'usr_' + randomUUID(), clerkUserId, orgId, name, email: email || `${clerkUserId}@no-email.invalid`, role,"), 'our usr_ id; the Clerk id in its own column');
     assert.ok(s.includes("            active: true, profile: { status: 'Active', userType: role }, updatedAt: new Date(),"), 'the shape users-sync.mjs creates');
     assert.ok(s.includes('        }).onConflictDoNothing().returning();'), 'a race on the per-org unique index is not an error');
-    assert.ok(s.includes('        invalidateRoster(orgId);'), 'the 30 s "no roster row" answer in the caller cache is dropped');
+    assert.ok(s.includes('        invalidateRoster(orgId);'), 'the cached views of the users table are dropped (a "no roster row" answer among them until §0.295)');
     assert.ok(s.includes("        console.warn('_lib.ensureRosterRow:', e.message);\n        throw e;\n"), 'REGRESSION (§0.292): a failed roster read is a caller with no profile');
     assert.ok(s.includes("                console.warn('_lib.ensureRosterRow: Clerk could not be read:', e.message);\n                return null;"), 'Clerk unreadable: no row made of nothing read');
 });
@@ -42,7 +42,7 @@ test('the self-profile GET provisions when nothing matched; the request function
     const line = '                if (!row) row = await ensureRosterRow({ clerkUserId: userId, orgId, clerkUser, orgRole: auth.orgRole });';
     assert.ok(u.includes(line), 'REGRESSION (§0.108): a member with no roster row gets one on their first load');
     const linkEnd = u.indexOf("console.warn('users.mjs: link update failed:'");
-    const ret = u.indexOf("return { statusCode: 200, headers, body: JSON.stringify({ user: row ? flatten(row) : null }) };");
+    const ret = u.indexOf("return { statusCode: 200, headers, body: JSON.stringify({ user: row ? flatten(row) : null, ...(joined && row ? { joined: true } : {}) }) };");
     assert.ok(linkEnd > 0 && u.indexOf(line) > linkEnd && u.indexOf(line) < ret, 'after the link attempt, before the answer — the Clerk user already fetched is handed in');
     const r = code(read('netlify/functions/integration-requests.mjs'));
     assert.match(r, /import \{ [^}]*ensureRosterRow[^}]* \} from '\.\/_lib\.mjs';/);

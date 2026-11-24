@@ -116,7 +116,7 @@ test('AdminView reads card state, attention and health from the module; the foot
     assert.doesNotMatch(av, /Never changed|Edited \$\{item\.updatedAt\}/, 'the invented footer');
     assert.ok(av.includes('const allAttentionItems = scopeItems.filter(i => cardStates[i.id].attention)'), 'attention is computed');
     assert.doesNotMatch(av, /SETTINGS_ITEMS\.filter\(i => i\.attention\)/);
-    assert.ok(av.includes('const activeHealthChecks = healthChecksOf(settings, liveCounts, isHidden);'));
+    assert.ok(av.includes('const activeHealthChecks = healthChecksOf(cardSettings, liveCounts, isHidden);'));   // the team as read (§0.295)
     assert.ok(av.includes('{health.sentence}'), 'the tile sentence comes from the checks');
     assert.doesNotMatch(av, /Set up SSO and enforce MFA|'MFA enforced'|'Session policy set'|ok: true\s+\}/, 'the constants');
     // Moved pin (§0.247, docs/design/refusal-sweep Part 9): the count block is settingsCards.js liveCountsOf — the backup

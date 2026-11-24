@@ -208,8 +208,8 @@ test('a PUT that clears the account, the deal and every contact clears them', as
 // owned rows only to their owner, a null caller fails closed to
 // unassigned-only. This block is the suite's FIRST user seed — appended last
 // so every earlier test still runs with the unresolvable caller it was
-// written for; invalidateRoster() clears the 30s null-caller cache those
-// tests will have filled.
+// written for; invalidateRoster() clears the users-table caches those
+// tests will have filled (a null caller among them until §0.295).
 
 const asRepRole = (e) => ({ ...e, headers: { ...e.headers, 'x-test-role': 'User' } });
 const TASK_REP = 'usr_itest-tasks-rep-01';

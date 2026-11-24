@@ -129,7 +129,7 @@ test('THE GUARD: no read of the caller is caught where it is asked — getCaller
 // The fake database reads no WHERE: each of these reads is this org's, by its text.
 test("WIRING: each read that decides is this org's alone, and the caller's is kept for 30 seconds", () => {
     const holds = (f, ...lines) => { const s = sourceOf(f).split('\r\n').join('\n'); for (const l of lines) assert.ok(s.includes(l), `REGRESSION (§0.292): ${f}: ${l}`); };
-    holds('_lib', '        .where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)));\n    const caller = { id: row?.id || null, name: row?.name || null };\n    callerCache.set(key, { caller, ts: Date.now() });\n',
+    holds('_lib', '        .where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)));\n    const caller = { id: row?.id || null, name: row?.name || null };\n', '    if (!row) return caller;\n    callerCache.set(key, { caller, ts: Date.now() });\n',
         '    if (cached && Date.now() - cached.ts < CALLER_NAME_TTL_MS) return cached.caller;\n', 'const CALLER_NAME_TTL_MS = 30_000;');
     const ROW = '.from(settingsTable).where(eq(settingsTable.orgId, orgId));\n';
     holds('quotes', `export async function getApprovalTiers(orgId) {\n    const rows = await db.select()${ROW}`);
@@ -406,7 +406,7 @@ test("the app's profile load: asked once more after a failure, then said — nev
     assert.deepEqual(await go(answer(403, { error: 'x', code: 'deactivated' })), [{ deactivated: true }, 1]);
     assert.deepEqual(await go(answer(403, { error: 'Not a member.' }), answer(403, { error: 'Not a member.' })), ['Not a member.', 2]);
     const app = readFileSync(new URL('src/App.jsx', ROOT), 'utf8').split('\r\n').join('\n');
-    const at = app.indexOf("const meLoad = ++meLoadRef.current;\nconst meStill = () => meLoadRef.current === meLoad && prevOrgIdRef.current === meOrgId;\nreadMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)\n    .then(data => {\n        if (prevOrgIdRef.current !== meOrgId) return;\n        if (meLoadRef.current !== meLoad) return;\n");
+    const at = app.indexOf("const meLoad = ++meLoadRef.current;\nconst meStill = () => meLoadRef.current === meLoad && prevOrgIdRef.current === meOrgId;\nreadMyProfile(() => dbFetch('/.netlify/functions/users?me=true'), meStill)\n    .then(data => {\n        if (prevOrgIdRef.current !== meOrgId) return;\n        // Their row here was linked, made or saved");
     assert.ok(at > 0);
     const load = app.slice(at, app.indexOf('    loadData();', at));
     const emptied = '    useEffect(() => { meHeldRef.current = null; }, [activeOrgId]);';

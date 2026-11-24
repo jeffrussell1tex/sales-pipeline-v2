@@ -3,7 +3,7 @@
 // reads their role from. A refused or failed answer was dropped in silence: no profile, the whole session a Sales Rep's of
 // nobody, until a reload. It is asked once more — the request links or makes the row, and may be sent again (state §0.108)
 // — and a second failure is thrown in plain words, for the screen to say.
-// { user } as answered, or { deactivated: true } — the caller's access here was turned off (state §0.164), never asked again;
+// { user } as answered (joined: true when their row here was linked, made or saved in the last two minutes, users.mjs, state §0.295), or { deactivated: true } — the caller's access here was turned off (state §0.164), never asked again;
 // null once `still()` says another load is the one on screen — never asked again for it, which would ask for its org.
 import { refusalWords } from './refusalWords.js';
 

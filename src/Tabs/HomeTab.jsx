@@ -87,7 +87,7 @@ const CLAIM_STATUS = {
     paid:     { label: 'Paid',     color: T.info   },
 };
 
-function SpiffPanel({ spiffs, claims }) {
+function SpiffPanel({ spiffs, claims, unread }) {
     const active = (spiffs || []).filter(s => s.active);
     const mine   = [...(claims || [])].sort(
         (a, b) => new Date(b.claimedAt || 0) - new Date(a.claimedAt || 0)
@@ -121,7 +121,9 @@ function SpiffPanel({ spiffs, claims }) {
                 </div>
             ))}
 
-            {mine.length > 0 && (
+            {/* The claims were not read (state §0.295): never a short list of them. */}
+            {unread && <div role="status" style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: T.inkMuted, fontFamily: T.sans }}>{unread}</div>}
+            {mine.length > 0 && !unread && (
                 <div style={{ marginTop: '0.875rem', paddingTop: '0.75rem', borderTop: `1px solid ${T.border}` }}>
                     <div style={{ ...eyebrow(), marginBottom: '0.5rem' }}>My claims</div>
                     {mine.map(c => {
@@ -900,6 +902,7 @@ export default function HomeTab() {
                             <SpiffPanel
                                 spiffs={settings.spiffs}
                                 claims={(spiffClaims || []).filter(c => c.repName === currentUser)}
+                                unread={unreadWords(loads, ['spiffClaims'])}
                             />
                         )}
 

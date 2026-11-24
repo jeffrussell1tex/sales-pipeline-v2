@@ -373,7 +373,8 @@ test('THE GUARD: each single create answers 409 for an id another org holds — 
         const s = fn(name);
         // Moved pin (§0.277): a quote's create rides in its deal's claim batch — the same insert, the batch's last statement.
         // Moved in §0.280: a quote's create answers the quote with its stamp (`returning(STAMPED())`).
-        assert.ok(s.includes(`.onConflictDoNothing({ target: ${table}.id }).returning(${name === 'quotes' ? 'STAMPED())]);' : ');'}`), `${name}: the create writes nothing for a taken id`);
+        // Moved in §0.295: a claim's rides in its pair's batch.
+        assert.ok(s.includes(`.onConflictDoNothing({ target: ${table}.id }).returning(${name === 'quotes' ? 'STAMPED())]);' : name === 'spiff-claims' ? ')]);' : ');'}`), `${name}: the create writes nothing for a taken id`);
         assert.ok(s.includes(`if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That ${noun} id is already in use.' }) };`), name);
     }
 });

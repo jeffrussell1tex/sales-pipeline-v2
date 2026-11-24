@@ -105,6 +105,8 @@ const USR = {
 const SP_ON = ID('spiff_on'), SP_OFF = ID('spiff_off'), SP_REMOVED = ID('spiff_removed'), SP_B = ID('spiff_b');
 // Deals: Karen's, Ravi's, B's; one deleted since (no row).
 const DEAL_K = ID('deal_karen'), DEAL_R = ID('deal_ravi'), DEAL_B = ID('deal_b'), DEAL_GONE = ID('deal_gone');
+// A deal's SPIFF is claimed once (state §0.295): the claims the POST cases file stand on deals of their own.
+const DEAL_R2 = ID('deal_ravi2'), DEAL_K2 = ID('deal_karen2'), DEAL_K3 = ID('deal_karen3'), DEAL_K4 = ID('deal_karen4');
 // Products: A's active and inactive, B's; one that names nothing.
 const PROD_ON = ID('prod_on'), PROD_OFF = ID('prod_off'), PROD_B = ID('prod_b'), PROD_GONE = ID('prod_gone');
 // Claims: A's whose SPIFF was removed and deal deleted; Karen's pending; one to delete; B's.
@@ -180,6 +182,7 @@ before(async () => {
     const deal = (id, org, owner, rep) => ({ id, orgId: org, pipelineId: 'default', stage: 'Proposal', opportunityName: id, account: 'Slinks Co', ownerId: owner, salesRep: rep, arr: '1000.00' });
     await db.insert(opportunities).values([
         deal(DEAL_K, A, USR.karen, 'Karen Slinks'), deal(DEAL_R, A, USR.ravi, 'Ravi Slinks'), deal(DEAL_B, B, USR.repB, 'Bo Slinks'),
+        deal(DEAL_R2, A, USR.ravi, 'Ravi Slinks'), ...[DEAL_K2, DEAL_K3, DEAL_K4].map((id) => deal(id, A, USR.karen, 'Karen Slinks')),
     ]);
     await db.insert(products).values([
         { id: PROD_ON, orgId: A, name: 'Slinks Platform', listPrice: '100.00', active: true },
@@ -244,10 +247,10 @@ test("an inactive SPIFF of this org stands (\"Any of this org's\") — 201", asy
 });
 
 test("a rep's claim on another rep's deal of this org stands (E3: any deal of the org) — 201", async () => {
-    const r = await call('spiff-claims', WHO.karen, 'POST', newClaim(ID('n_claim_ravideal'), { opportunityId: DEAL_R }));
+    const r = await call('spiff-claims', WHO.karen, 'POST', newClaim(ID('n_claim_ravideal'), { opportunityId: DEAL_R2 }));
     assert.equal(r.status, 201, JSON.stringify(r.body));
     const row = await one(spiffClaims, ID('n_claim_ravideal'));
-    assert.equal(row.opportunityId, DEAL_R);
+    assert.equal(row.opportunityId, DEAL_R2);
     assert.equal(row.repName, 'Karen Slinks', 'filed in her roster name');
 });
 
@@ -333,7 +336,7 @@ test("(1): a Manager's save that turns a set rep to spaces is refused 400 naming
 });
 
 test("a Sales Rep's claim whose body names a rep of spaces, or none, is filed — 201, in her roster name: the rep is tested on the claim as written (review F1)", async () => {
-    for (const [tag, extra] of [['spacesrep', { repName: '   ' }], ['norep', { repName: undefined }]]) {
+    for (const [tag, extra] of [['spacesrep', { repName: '   ', opportunityId: DEAL_K2 }], ['norep', { repName: undefined, opportunityId: DEAL_K3 }]]) {
         const r = await call('spiff-claims', WHO.karen, 'POST', newClaim(ID(`n_claim_${tag}`), extra));
         assert.equal(r.status, 201, `${tag}: ${JSON.stringify(r.body)}`);
         assert.equal((await one(spiffClaims, ID(`n_claim_${tag}`))).repName, 'Karen Slinks', `${tag}: filed in her roster name`);
@@ -388,7 +391,7 @@ test("(2): an Admin's save of org B's claim id is 404 — B's row byte-identical
 
 test("a claim POST with org B's claim id is 409 — it crashed, a 500 — and B's row is byte-identical", async () => {
     const was = await one(spiffClaims, CLAIM_B);
-    const r = await call('spiff-claims', WHO.mgr, 'POST', newClaim(CLAIM_B, { repName: 'Ravi Slinks', amount: 50 }));
+    const r = await call('spiff-claims', WHO.mgr, 'POST', newClaim(CLAIM_B, { repName: 'Ravi Slinks', amount: 50, opportunityId: DEAL_K4 }));
     assert.equal(r.status, 409, JSON.stringify(r.body));
     assert.deepEqual(r.body, { error: 'That claim id is already in use.' });
     assert.deepEqual(await one(spiffClaims, CLAIM_B), was);

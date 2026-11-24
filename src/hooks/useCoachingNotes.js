@@ -12,7 +12,7 @@
 // be read." (failureWords). Offline the dialog stayed "Saving…" for good with Send and Cancel disabled, and Home's "Mark
 // read" said nothing. A failed load is `coachingNotesError`, said by Sales Manager's "Recent coaching" and Home's "Notes
 // from your manager" — it read as no notes.
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage.js';
 import { readRefusal, failureWords, refusalWords, heardRefusal, landedBefore } from '../utils/refusalWords.js';
 
@@ -38,16 +38,25 @@ export function useCoachingNotes({ waitForToken, orgId = null, enabled = true } 
     const [coachingNotesLoaded, setCoachingNotesLoaded] = useState(false);
     const [coachingNotesError, setCoachingNotesError] = useState('');
 
+    const loadGen = useRef(0);   // an answer, or a failure, a later read overtook is dropped (state §0.295): a first sign-in reads them twice
     const reload = useCallback(async () => {
         // This org's notes only (state §0.173): an answer for an org switched away
         // from is dropped — the effect's cancel flag guarded only the wait before it.
         // A refusal is thrown in the server's words (§0.246), said by the effect as the load's error.
         const askedOrg = requestOrg();
-        const res = await dbFetch(URL);
-        if (!stillOrg(askedOrg)) return false;
-        if (!res.ok) throw new Error(await readRefusal(res));
-        const data = await res.json();
-        if (!stillOrg(askedOrg)) return false;
+        const gen = ++loadGen.current;
+        const current = () => stillOrg(askedOrg) && gen === loadGen.current;
+        let data;
+        try {
+            const res = await dbFetch(URL);
+            if (!current()) return false;
+            if (!res.ok) throw new Error(await readRefusal(res));
+            data = await res.json();
+        } catch (err) {
+            if (!current()) return false;   // a failure a later read overtook, or of another org's, is not said either
+            throw err;
+        }
+        if (!stillOrg(askedOrg) || gen !== loadGen.current) return false;
         setCoachingNotes(Array.isArray(data?.coachingNotes) ? data.coachingNotes : []);
         setCoachingNotesLoaded(true);
         setCoachingNotesError('');
@@ -75,6 +84,12 @@ export function useCoachingNotes({ waitForToken, orgId = null, enabled = true } 
         })();
         return () => { cancelled = true; };
     }, [enabled, orgId, waitForToken, reload]);
+
+    // …and read again (a first sign-in, state §0.295): a failure is said as the load's is, for the org that asked.
+    const reloadSaid = useCallback(async () => {
+        const askedOrg = requestOrg();
+        try { await reload(); } catch (err) { if (stillOrg(askedOrg)) setCoachingNotesError(failureWords(err)); }
+    }, [reload]);
 
     /** POST a payload from newNotePayload. Returns { ok, note?, error? }. */
     // After an org switch an answer changes nothing on screen (state §0.175); the
@@ -110,5 +125,5 @@ export function useCoachingNotes({ waitForToken, orgId = null, enabled = true } 
         return { ok: true };
     }, []);
 
-    return { coachingNotes, coachingNotesLoaded, coachingNotesError, reloadCoachingNotes: reload, addCoachingNote, markCoachingNoteRead, deleteCoachingNote };
+    return { coachingNotes, coachingNotesLoaded, coachingNotesError, reloadCoachingNotes: reloadSaid, addCoachingNote, markCoachingNoteRead, deleteCoachingNote };
 }

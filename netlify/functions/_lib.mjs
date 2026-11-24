@@ -140,6 +140,9 @@ export async function resolveCaller(clerkUserId, orgId) {
         .from(users)
         .where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)));
     const caller = { id: row?.id || null, name: row?.name || null };
+    // A miss is not cached (state §0.295, as verifyAuth's is not): it is the moment before users?me=true links an invited
+    // row or makes one, and each warm function held its own — the lists read again after the link were still nobody's.
+    if (!row) return caller;
     callerCache.set(key, { caller, ts: Date.now() });
     if (callerCache.size > 500) callerCache.delete(callerCache.keys().next().value);
     return caller;
@@ -266,9 +269,11 @@ export async function memberNamesOf(orgId) {
  *   rosterCache  orgId              name -> id resolution (resolveOwnerId)
  *   callerCache  orgId::clerkUserId this caller's own id and name (resolveCaller)
  *
- * The caller cache is the one with teeth. It caches a MISS as `{id: null}`, and a
- * null caller id fails CLOSED in mayMutate() — so a user whose roster row was
- * created or linked moments ago owns nothing at all until the entry expires.
+ * The caller cache is the one with teeth. It cached a MISS as `{id: null}` until
+ * §0.295 (not since: resolveCaller), and a null caller id fails CLOSED in mayMutate()
+ * — so a user whose roster row was created or linked moments ago owned nothing at all
+ * until the entry expired; what is left to clear is a name from before a rename, and
+ * the id of a row removed or replaced since.
  * Dropping both together is why this takes an orgId and not a user id.
  */
 export function invalidateRoster(orgId) {
@@ -691,6 +696,10 @@ export const ownerClaim = (table, id, orgId, filter) => (filter === undefined ? 
 // statement when what it writes was decided on a read — the row, in this org, unchanged since, locked for the batch —
 // else the whole batch aborts (1 / 0: 22012). `stamp` is the read's `${table.updatedAt}::text`.
 export const rowAsRead = (table, id, orgId, stamp) => db.execute(sql`with c as (select ${table.id} from ${table} where ${table.id} = ${id} and ${table.orgId} = ${orgId} and ${table.updatedAt}::text = ${stamp} for update) select 1 / count(*) from c`);
+
+// A row locked for the rest of the batch, and nothing asked of it (state §0.295): of two batches that open with it the
+// second waits for the first, so what its next statement reads is what the first left. A row not there locks nothing.
+export const rowLock = (table, id, orgId) => db.execute(sql`select ${table.id} from ${table} where ${table.id} = ${id} and ${table.orgId} = ${orgId} for update`);
 
 // Whether a batch was refused by its claim (ownerClaim) — the code the abort carries, on the error or its cause.
 export const claimRefused = (e) => String(e?.cause?.code || e?.code || '') === '22012';

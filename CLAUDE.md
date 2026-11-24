@@ -537,10 +537,13 @@ One commit per verified batch; doc patch in the same commit.
   or "no row" (§0.292; the one exception is Jeff's: an alert not known to have gone goes again, §0.293): `resolveCaller` throws (nulls are a member with no row here); `getCallerName` is a label —
   a maker's name, none on a failure — nothing decides on; a read after a landed write keeps its own catch (THE GUARD, tests/failed-reads.test.mjs;
   guide §18b138).
-- A list that was not read is never a list of none (§0.294): the app's nine lists load through `readList`
+- A list that was not read is never a list of none (§0.294): the app's eleven lists (the team and the SPIFF
+  claims since §0.295) load through `readList`
   (src/utils/listLoads.js), a tab is drawn once the lists it draws from were read (`TAB_LISTS`), a record's window once
   `RECORD_LISTS` were — one asked for before waits — and the banner stands until they are; ask `areRead` /
-  `unreadWords`, never a length (THE GUARD, tests/list-loads.test.mjs; guide §18b139).
+  `unreadWords`, never a length; a first sign-in (`joined`) reads everything again, and a caller with no row is never
+  cached (THE GUARD, tests/list-loads.test.mjs, tests/first-sign-in.test.mjs; guide §18b139). One claim for a deal
+  and a SPIFF is the server's (§0.295; 409 `claimed`, tests/integration/spiff-double.itest.mjs).
 - No Python on this machine; no `sed`. Multi-line edits: Node script with
   asserted occurrence counts, dry-run default, `--apply` flag, write once,
   re-read FROM DISK to verify. `App.jsx` is CRLF — preserve it.

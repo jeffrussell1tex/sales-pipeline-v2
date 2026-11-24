@@ -142,7 +142,7 @@ test('a Technician reads their own time off — the clause is added before any t
 test('SPIFF POST: a rep’s claim is filed in their roster name, pending, nothing approved or paid', () => {
     const s = code(read('netlify/functions/spiff-claims.mjs'));
     assert.ok(s.includes("import { serverErrorBody, auditAs, resolveCaller } from './_lib.mjs';"));
-    const post = between(s, "if (event.httpMethod === 'POST') {", '.returning();');
+    const post = between(s, "if (event.httpMethod === 'POST') {", '.returning()]);');   // the batch's last statement (§0.295)
     const rep = between(post, 'if (!isAdmin && !isManager) {', "claim = { ...claim, repName: me, status: 'pending', approvedAt: null, approvedBy: null, paidAt: null };");
     assert.ok(rep.includes('const { name: me } = await resolveCaller(auth.userId, orgId);'));
     assert.ok(rep.includes('if (!me) return { statusCode: 403,'), 'no roster row, no claim');
@@ -152,7 +152,7 @@ test('SPIFF POST: a rep’s claim is filed in their roster name, pending, nothin
 
 test('SPIFF PUT: over the stored claim; a rep edits their own, while pending, and never its approval or payment', () => {
     const s = code(read('netlify/functions/spiff-claims.mjs'));
-    const put = between(s, "if (event.httpMethod === 'PUT') {", '.returning();');
+    const put = between(s, "if (event.httpMethod === 'PUT') {", '.returning()]);');
     assert.ok(put.includes('.where(and(eq(spiffClaims.id, data.id), eq(spiffClaims.orgId, orgId)));'), 'the stored claim, in this org');
     // Moved pin (§0.276): the rep's block names the rep once (isRep, me — asked once, and written into the WHERE).
     const rep = between(put, 'if (isRep) {', 'changes = ownFields;');

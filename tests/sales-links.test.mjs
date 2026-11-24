@@ -344,20 +344,48 @@ test("spiff-claims POST: an id and a SPIFF are required — a SPIFF of spaces is
         ind(12, "if (typeof data.id !== 'string') return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };"),
         ind(12, 'const linked = await checkLinks(CLAIM_LINKS, claim, null, orgId);'),
         ind(12, ONE('linked')),
-        ind(12, 'const [inserted] = await db.insert(spiffClaims)'),
-        ind(16, '.values({ ...claim, orgId })'),
-        ind(16, '.onConflictDoNothing({ target: spiffClaims.id }).returning();'),
+        // Moved pin (§0.295): the insert is the last statement of its pair's batch — the deal locked, the pair free.
+        ind(16, 'const done = await db.batch([...pairFree(orgId, claim), db.insert(spiffClaims)'),
+        ind(20, '.values({ ...claim, orgId })'),
+        ind(20, '.onConflictDoNothing({ target: spiffClaims.id }).returning()]);'),
+        ind(16, '[inserted] = done.at(-1);'),
+        ind(16, 'if (!claimRefused(e)) throw e;'),
+        ind(16, 'if (!(await ownIdTaken(spiffClaims, claim.id, orgId))) return await alreadyClaimed(orgId, claim);'),
         ind(12, "if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That claim id is already in use.' }) };"));
     before(post, "if (!inserted) return { statusCode: 409,", "action: 'spiff_claim.submitted'", 'answered before the audit, which reads the row');
     assert.ok(!post.includes('data.repName'), "REGRESSION: the rep tested on the body — a rep's claim refused for a name the server replaces with hers (review F1)");
     assert.ok(!post.includes('!data.spiffId'), 'REGRESSION: a SPIFF of spaces taken as one, then asked as an id — a 404, not the 400 (review F2)');
 });
 
+test('one claim for a deal and a SPIFF (state §0.295): the statements the create, and a save that moves the pair, open with, rendered — the deal of this org locked, then an abort while another claim of THIS org holds the pair; none with no deal; the refusal its own', async () => {
+    const s = fn('spiff-claims');
+    const { and, eq, ne, sql } = await import('drizzle-orm');
+    const { PgDialect } = await import('drizzle-orm/pg-core');
+    const { spiffClaims, opportunities } = await import('../db/schema.ts');
+    const text = (q) => { const r = new PgDialect().sqlToQuery(q); return [r.sql, r.params]; };
+    const lock = read('netlify/functions/_lib.mjs').split('\n').find((l) => l.startsWith('export const rowLock = '));
+    assert.ok(lock, '_lib.mjs rowLock');
+    const block = between(s, 'const pairOf = (orgId', '\n]);');
+    const sent = [];
+    const pairFree = new Function('and', 'eq', 'ne', 'sql', 'spiffClaims', 'opportunities', 'db', `${BLANK_TEXT}\n${lock.replace('export ', '')}\n${block}\nreturn pairFree;`)(and, eq, ne, sql, spiffClaims, opportunities, { execute: (q) => { sent.push(text(q)); return 'stmt'; } });
+    assert.deepEqual(pairFree('org_a', { id: 'c2', opportunityId: 'd1', spiffId: 's1' }), ['stmt', 'stmt']);
+    assert.deepEqual(sent, [
+        ['select "opportunities"."id" from "opportunities" where "opportunities"."id" = $1 and "opportunities"."org_id" = $2 for update', ['d1', 'org_a']],
+        ['select 1 / (case when exists (select 1 from "spiff_claims" where ("spiff_claims"."org_id" = $1 and "spiff_claims"."opportunity_id" = $2 and "spiff_claims"."spiff_id" = $3 and "spiff_claims"."id" <> $4)) then 0 else 1 end)', ['org_a', 'd1', 's1', 'c2']],
+    ], 'REGRESSION: the pair is not held — two claims at once both land — or another org\'s claim refuses this one\'s');
+    for (const opportunityId of [null, undefined, '', '  ']) assert.deepEqual(pairFree('org_a', { id: 'c2', opportunityId, spiffId: 's1' }), [], 'no deal: nothing to claim twice');
+    assert.equal(sent.length, 2);
+    assert.equal(count(s, 'if (!claimRefused(e)) throw e;'), 2, 'REGRESSION: a failed write answered as claimed already');
+    assert.ok(s.includes("body: JSON.stringify({ error: 'This SPIFF is already claimed for this deal.', code: 'claimed', ...(held ? { spiffClaim: held } : {}) })") && s.includes('const [held] = await db.select().from(spiffClaims).where(pairOf(orgId, opportunityId, spiffId, id)).limit(1);'));
+    assert.ok(s.includes('const pair = { id, opportunityId: clean.opportunityId, spiffId: clean.spiffId };'), 'as the row would stand, not as the body names it');
+    assert.ok(s.includes("const pairAsRead = ['opportunityId', 'spiffId'].some((k) => Object.hasOwn(named, k))\n                ? and(sql`${spiffClaims.opportunityId} is not distinct from ${existing.opportunityId}`, eq(spiffClaims.spiffId, existing.spiffId))\n                : undefined;"));
+});
+
 test("a claim's SPIFF or rep is blank as its write would store it (blankText, run): text empty or spaces, or what sanitize's `|| null` stores as none — 0 and false too (they read as set through String() and met the NOT NULL, a 500); an object or a number is not blank — the link check refuses it — and never throws (String() threw on an object with no usable toString; re-check R1)", () => {
     const s = fn('spiff-claims');
     once(s, BLANK_TEXT);
     assert.ok(s.indexOf('\n' + BLANK_TEXT) >= 0 && s.includes(BLANK_TEXT) && s.indexOf(BLANK_TEXT) < s.indexOf('export const handler'), 'module scope, before the handler');
-    assert.equal(count(s, 'blankText('), 4, "the POST's SPIFF and rep, and the PUT's two sides — each blank test the claim's");
+    assert.equal(count(s, 'blankText('), 5, "the POST's SPIFF and rep, the PUT's two sides, and the pair's deal (§0.295) — each blank test the claim's");
     assert.ok(!s.includes("String(data.spiffId ?? '')") && !s.includes("String(claim.repName ?? '')") && !s.includes("String(changes[k] ?? '')"), 'REGRESSION: a blank test reads the raw value through String()');
     const blankText = new Function(`${BLANK_TEXT}\nreturn blankText;`)();
     const sanitize = new Function(`${between(s, 'const sanitize = (d) => ({', '\n});')}\nreturn sanitize;`)();
@@ -390,9 +418,14 @@ test("spiff-claims PUT: an id that is no text is 400; a claim this org does not 
         ind(12, 'const clean = sanitize({ ...(existing || {}), ...changes });'),
         ind(12, 'const { id, ...updateData } = clean;'),
         // Moved pin (§0.276): only the keys named are written, a rep's only while still pending and theirs.
-        ind(12, 'const [updated] = await db.update(spiffClaims).set({ ...named, updatedAt: new Date() })'),
-        ind(16, '.where(and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.id, id), stillTheirs, seen))'),
-        ind(16, '.returning();'),
+        // Moved pin (§0.295): behind the pair's claim when the save moves it.
+        ind(12, 'const movesPair = clean.opportunityId !== existing.opportunityId || clean.spiffId !== existing.spiffId;'),
+        ind(16, 'const done = await db.batch([...(movesPair ? pairFree(orgId, pair) : []), db.update(spiffClaims).set({ ...named, updatedAt: new Date() })'),
+        ind(20, '.where(and(eq(spiffClaims.orgId, orgId), eq(spiffClaims.id, id), stillTheirs, seen, pairAsRead))'),
+        ind(20, '.returning()]);'),
+        ind(16, '[updated] = done.at(-1);'),
+        ind(16, 'if (!claimRefused(e)) throw e;'),
+        ind(16, 'return await alreadyClaimed(orgId, pair);'),
         ind(16, "if (!now) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };"));
     assert.equal(count(put, NOT_HELD), 1, "one 404 for a claim this org does not hold — every role's");
     assert.ok(!between(put, ind(12, 'if (isRep) {'), 'changes = ownFields;').includes('if (!existing)'), "not the rep's alone: a manager's save of an unknown id created a claim");

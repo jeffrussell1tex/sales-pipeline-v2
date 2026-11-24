@@ -61,6 +61,8 @@ import { DispatchPropertyTypesDetail } from './settings/dispatch/DispatchPropert
 import { SETTINGS_ITEMS, WORKSPACE_TABS_BASE } from './settings/catalogue.js';
 import { cardStateOf, healthChecksOf, healthSummaryOf, liveCountsOf, unreadChecksOf, unreadSentenceOf, allClearOf } from '../utils/settingsCards';
 import PanelGate from '../components/ui/PanelGate.jsx';
+import { useApp } from '../AppContext';
+import { areRead, failedOf } from '../utils/listLoads.js';
 
 // "Recently changed" when the audit log could not be read (state §0.247, Q18): never an empty card, as though nothing changed.
 const RECENT_UNREAD = 'The recent changes could not be read.';
@@ -102,6 +104,7 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
 // settings/shared/LeaveGuardModal.jsx.
 
 export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, settingsDirty, setSettingsDirty, settingsSaveRef, openPanelId = null, onOpenedPanel }) => {
+    const { loads } = useApp();
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
     const [activeItem, setActiveItem] = useState(null); // detail panel state
@@ -413,7 +416,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         // Quoting detail pages
         if (id === 'quote-templates') return <QuoteTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}
             onOpenPanel={(to) => { const it = SETTINGS_ITEMS.find(i => i.id === to); if (it) openItem(it); }}/>;
-        if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'approval-tiers')  return <PanelGate id="approval-tiers" onBack={onBack}><ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/></PanelGate>;
         if (id === 'product-types')   return <ProductTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
 
         // Data detail pages
@@ -433,13 +436,13 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'apps')        return <ConnectedAppsDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'api-keys')    return <ApiKeysDetail      onBack={onBack}/>;
         if (id === 'webhooks')    return <WebhooksDetail     onBack={onBack}/>;
-        if (id === 'automations') return <AutomationsDetail  onBack={onBack}/>;
+        if (id === 'automations') return <PanelGate id="automations" onBack={onBack}><AutomationsDetail  onBack={onBack}/></PanelGate>;
 
         // People & Teams detail pages
-        if (id === 'users')       return <UsersDetail       settings={settings} onBack={onBack}/>;
-        if (id === 'teams')       return <TeamsDetail        settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'territories') return <TerritoriesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'roles')       return <RolesDetail       settings={settings} onBack={onBack}/>;
+        if (id === 'users')       return <PanelGate id="users" onBack={onBack}><UsersDetail       settings={settings} onBack={onBack}/></PanelGate>;
+        if (id === 'teams')       return <PanelGate id="teams" onBack={onBack}><TeamsDetail        settings={settings} setSettings={setSettings} onBack={onBack}/></PanelGate>;
+        if (id === 'territories') return <PanelGate id="territories" onBack={onBack}><TerritoriesDetail settings={settings} setSettings={setSettings} onBack={onBack}/></PanelGate>;
+        if (id === 'roles')       return <PanelGate id="roles" onBack={onBack}><RolesDetail       settings={settings} onBack={onBack}/></PanelGate>;
 
         // Sales process Group 2 detail pages
         if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
@@ -538,7 +541,10 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
     // Attention is computed per card from the same live data as its chip (the
     // catalogue's attention:true on webhooks and sso were hand-typed, §0.81);
     // the row shows the computed detail, not the row's typed one.
-    const cardStates = Object.fromEntries(scopeItems.map(i => [i.id, cardStateOf(i, settings, liveCounts)]));
+    // The team, as read (state §0.295): not read, its cards count nothing and its check is not one that passes.
+    const cardSettings = areRead(loads, ['users']) ? settings : { ...settings, users: undefined };
+    const checkCounts = failedOf(loads, ['users']).length ? { ...liveCounts, unread: [...(liveCounts.unread || []), 'teams'] } : liveCounts;
+    const cardStates = Object.fromEntries(scopeItems.map(i => [i.id, cardStateOf(i, cardSettings, liveCounts)]));
     const allAttentionItems = scopeItems.filter(i => cardStates[i.id].attention).map(i => ({ ...i, statusDetail: cardStates[i.id].statusDetail }));
     const visibleAttention  = allAttentionItems.filter(it => !isHidden(it.id));
     const hiddenAttention   = allAttentionItems.filter(it =>  isHidden(it.id));
@@ -549,14 +555,14 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
     // Only checks that can be READ (settingsCards.js): four of the eight here
     // were constants — "MFA enforced" false beside live enrolment, "Backups
     // running" / "Session policy set" / "Quote branding configured" true (§0.81).
-    const activeHealthChecks = healthChecksOf(settings, liveCounts, isHidden);
+    const activeHealthChecks = healthChecksOf(cardSettings, liveCounts, isHidden);
     const health    = healthSummaryOf(activeHealthChecks);
     const healthOk  = health.ok;
     const healthPct = health.pct;
     // The checks a failed read left out, named (settingsCards.js unreadChecksOf, §0.247; Jeff, 12 Nov: "Name the unread
     // (Recommended)"): the score counts only what was read, the tile says what was not, and Needs attention never says
     // every check passes while one is unread. Hidden by the same isHidden as the checks.
-    const unreadChecks   = unreadChecksOf(liveCounts, isHidden);
+    const unreadChecks   = unreadChecksOf(checkCounts, isHidden);
     const unreadSentence = unreadSentenceOf(unreadChecks);
     const allClear       = allClearOf(hiddenCount, unreadChecks.length);
 
@@ -800,7 +806,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
                                     </div>
                                 )}
                                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
-                                    {list.map(it => <V2Card key={it.id} item={it} settings={settings} liveCounts={liveCounts} onOpen={it.id === 'price-book' ? openQuotesPriceBook : DETAIL_PANELS[it.id] ? () => openItem(it) : undefined}/>)}
+                                    {list.map(it => <V2Card key={it.id} item={it} settings={cardSettings} liveCounts={liveCounts} onOpen={it.id === 'price-book' ? openQuotesPriceBook : DETAIL_PANELS[it.id] ? () => openItem(it) : undefined}/>)}
                                 </div>
                             </div>
                         ))}

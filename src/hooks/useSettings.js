@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { safeStorage, dbFetch, waitForToken } from '../utils/storage';
 import { DEFAULT_SETTINGS, settingsAsLoaded } from '../utils/settingsDefaults.js';
 import { readRefusal, failureWords } from '../utils/refusalWords.js';
+import { readList } from '../utils/listLoads.js';
 
 // The app's copy of the active org's settings. This hook LOADS them and never
 // writes them (state §0.170): each settings screen saves the keys it owns by its
@@ -19,7 +20,7 @@ import { readRefusal, failureWords } from '../utils/refusalWords.js';
 // workspace has never saved reads as its default, and a save writes it, so the
 // autosave's one useful act, writing a new workspace's defaults, is the server's.
 
-export function useSettings() {
+export function useSettings(deps = {}) {
     // WHICH ORG's settings are in state (state §0.162). Every load is for one
     // org — the org App passes, the org its token speaks for — and takes the
     // next number; an answer that comes back for an older number is dropped, so
@@ -39,6 +40,18 @@ export function useSettings() {
     const [loadError, setLoadError] = useState('');
 
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+
+    // The team (/users), read through the one loader (state §0.295; guide §18b139): a refused or failed read was silent, the
+    // roster none — a team deleted over it cleared no member, an invitation was sent again. Reps read a DIRECTORY
+    // (id/name/active only), so the user pickers have names to offer. A failed reload leaves the roster already loaded. On
+    // an org switch it waits 500ms, so Clerk's JWT has rotated. `deps.reportLoad` is stable.
+    const rosterGen = useRef(0);
+    const loadRoster = (delay = 0) => readList('users', {
+        read: () => dbFetch('/.netlify/functions/users'),
+        take: (rows) => setSettings(prev => ({ ...prev, users: rows })),
+        gen: rosterGen, report: deps.reportLoad,
+        wait: async () => { await waitForToken(); await new Promise(resolve => setTimeout(resolve, delay)); },
+    });
 
     // Load the org's settings and roster from the DB. App calls this for the
     // active org each time its main load runs — at sign-in, and on every switch.
@@ -105,26 +118,7 @@ export function useSettings() {
                 if (settingsOrgRef.current !== orgId) setLoadError(failureWords(err));
             });
 
-        waitForToken()
-            .then(() => new Promise(resolve => setTimeout(resolve, usersDelay)))
-            .then(() =>
-                dbFetch('/.netlify/functions/users')
-                    .then(r => {
-                        // Reps now receive a DIRECTORY read (id/name/active only)
-                        // rather than a 403, so the user pickers have names to
-                        // offer. A genuine failure still leaves the array alone
-                        // rather than blanking a roster already loaded.
-                        if (!r.ok) return null;
-                        return r.json();
-                    })
-                    .then(data => {
-                        if (gen !== loadGenRef.current) return;   // the roster of an org the user left
-                        if (data && data.users) {
-                            setSettings(prev => ({ ...prev, users: data.users }));
-                        }
-                    })
-                    .catch(() => {})
-            );
+        loadRoster(usersDelay);
     };
 
     return {
@@ -132,6 +126,6 @@ export function useSettings() {
         setSettings,
         settingsOrgId,
         settingsLoadError: loadError,
-        loadSettings,
+        loadSettings, loadRoster,
     };
 }

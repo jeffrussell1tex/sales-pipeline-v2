@@ -85,6 +85,9 @@ const writeAudit = async (orgId, action, entityId, entityName, actorId, actorNam
 };
 
 
+const JUST_WRITTEN_MS = 2 * 60 * 1000;
+const justWritten = (row) => { const at = new Date(row.updatedAt || 0).getTime(); return Number.isFinite(at) && Math.abs(Date.now() - at) < JUST_WRITTEN_MS; };
+
 export const handler = async (event) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -340,6 +343,10 @@ export const handler = async (event) => {
             let [row] = await db.select().from(users)
                 .where(and(eq(users.clerkUserId, userId), eq(users.orgId, orgId)));
 
+            // The lists asked beside this request were answered for no member here (state §0.295) — this request's link or row,
+            // or one just before it: the answer that said so may have been lost, or overtaken, and asked again. A row written
+            // in the last two minutes says so (its own link, or a save of it): the lists are read once more than needed at worst.
+            const joined = !row || justWritten(row);
             if (!row) {
                 const { createClerkClient } = await import('@clerk/backend');
                 const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -392,10 +399,9 @@ export const handler = async (event) => {
                         // The row as stored (state §0.203): the copy read before the write
                         // answered plans a quota save had replaced since, and the old status.
                         row = linked || { ...row, clerkUserId: userId, role: linkRole, active: !stillOff };
-                        // The caller cache keys on clerkUserId and has just been proved
-                        // wrong by this very write: it holds a 30s 'no roster row' answer
-                        // for this identity, which fails CLOSED — the user would own
-                        // nothing for half a minute after their first load.
+                        // The caches of the users table, after a write to it. (The caller cache held
+                        // a 30s 'no roster row' answer for this identity until §0.295, which fails
+                        // CLOSED — the user owned nothing for half a minute after their first load.)
                         invalidateRoster(orgId);
                         console.log(`users.mjs: linked roster row ${row.id} → clerk ${userId} (${clerkEmail})`);
                     } catch (linkErr) {
@@ -422,7 +428,7 @@ export const handler = async (event) => {
                 }
             }
 
-            return { statusCode: 200, headers, body: JSON.stringify({ user: row ? flatten(row) : null }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ user: row ? flatten(row) : null, ...(joined && row ? { joined: true } : {}) }) };
         } catch (err) {
             console.error('Users /me GET error:', err.message);
             return { statusCode: 500, headers, body: serverErrorBody(err, 'users') };

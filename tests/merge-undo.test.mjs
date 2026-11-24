@@ -1332,27 +1332,25 @@ test('T24 — SPIFF claims read again after a merge and after its Undo (state §
     const HEAD = ind(4, 'useEffect(() => {\n        if (!listsRead || !activeOrgId) return;');
     const effect = between(a, HEAD, ind(4, '}, [listsRead]); // eslint-disable-line react-hooks/exhaustive-deps -- the org\'s own load is the effect above'));
     const raw = read(APP);
-    assert.ok(raw.indexOf(HEAD) > raw.indexOf('// Spiff claims: once signed in with an active org') && raw.indexOf('// Spiff claims: once signed in with an active org') > 0, 'after the org\'s own load');
+    assert.ok(raw.includes('// Spiff claims: once signed in with an active org') && raw.indexOf(HEAD) > raw.indexOf('// Spiff claims: once signed in with an active org'), 'after the org\'s own load');
     const fn = effect.slice(effect.indexOf('{') + 1, effect.lastIndexOf('}, [listsRead]'));
-    const runEffect = (listsRead, activeOrgId, org) => {
-        const calls = [], waits = [];
-        const cleanup = new Function('listsRead', 'activeOrgId', 'requestOrg', 'stillOrg', 'dbFetch', 'setSpiffClaims', fn)(
-            listsRead, activeOrgId, () => 'org_qa', () => org.now === 'org_qa',
-            (url) => { calls.push(url); return new Promise((r) => waits.push(r)); }, (v) => calls.push(['set', v]));
-        return { calls, cleanup, answer: async (claims) => { waits.shift()?.({ ok: true, json: async () => ({ spiffClaims: claims }) }); for (let i = 0; i < 5; i++) await tick(); } };
-    };
-    const org = { now: 'org_qa' };
-    assert.deepEqual(runEffect(0, 'org_qa', org).calls, [], 'no merge yet: the org\'s own load reads them');
-    assert.deepEqual(runEffect(1, null, org).calls, [], 'no org: nothing');
-    const one = runEffect(1, 'org_qa', org);
-    await one.answer([{ id: 'cl_1', account: 'Resinall' }]);
-    assert.deepEqual(one.calls, ['/.netlify/functions/spiff-claims', ['set', [{ id: 'cl_1', account: 'Resinall' }]]], 'REGRESSION: the claims kept from before the merge — the old name shown');
-    const overtaken = runEffect(2, 'org_qa', org);
-    overtaken.cleanup();
-    await overtaken.answer([{ id: 'cl_1', account: 'Resinall, Inc.' }]);
-    assert.deepEqual(overtaken.calls, ['/.netlify/functions/spiff-claims'], 'REGRESSION: an answer a later read overtook set');
-    const switched = runEffect(3, 'org_qa', org);
-    org.now = 'org_b';
-    await switched.answer([{ id: 'cl_9' }]);
-    assert.deepEqual(switched.calls, ['/.netlify/functions/spiff-claims'], 'REGRESSION: an answer for an org switched away from set');
+    const runEffect = (listsRead, activeOrgId) => { let n = 0; new Function('listsRead', 'activeOrgId', 'loadSpiffClaims', fn)(listsRead, activeOrgId, () => { n += 1; }); return n; };
+    assert.deepEqual([runEffect(0, 'org_qa'), runEffect(1, null), runEffect(1, 'org_qa')], [0, 0, 1], 'no merge yet, or no org: nothing; REGRESSION otherwise: the claims kept from before the merge — the old name shown');
+    // Moved in §0.295: the read is the one loader's, run here as App has it — an answer a later read overtook, or for an
+    // org switched away from, dropped.
+    const { readList } = await import('../src/utils/listLoads.js');
+    const { setRequestOrg } = await import('../src/utils/storage.js');
+    const body = between(a, '    const claimsGen = React.useRef(0);', '\n    });');
+    const sets = [], waits = [];
+    const loadSpiffClaims = new Function('React', 'readList', 'dbFetch', 'setSpiffClaims', 'reportLoad', 'waitForToken', `${body}\nreturn loadSpiffClaims;`)(
+        { useRef: (v) => ({ current: v }) }, readList, () => new Promise((r) => waits.push(r)), (v) => sets.push(v.map((c) => c.id)), () => {}, async () => {});
+    const answer = (i, id) => waits[i]({ ok: true, status: 200, json: async () => ({ spiffClaims: [{ id }] }) });
+    const settle = async () => { for (let i = 0; i < 6; i++) await tick(); };
+    setRequestOrg('org_qa');
+    loadSpiffClaims(); loadSpiffClaims(); await settle();
+    answer(1, 'new'); await settle(); answer(0, 'old'); await settle();
+    assert.deepEqual(sets, [['new']], 'REGRESSION: an answer a later read overtook set');
+    loadSpiffClaims(); await settle(); setRequestOrg('org_b'); answer(2, 'other org'); await settle();
+    setRequestOrg(null);
+    assert.deepEqual(sets, [['new']], 'REGRESSION: an answer for an org switched away from set');
 });
