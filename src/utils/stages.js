@@ -135,6 +135,8 @@ export const KEEP_ONE_STAGE = 'Keep at least one open stage.';
 export const KEEP_THE_CLOSES = 'Closed Won and Closed Lost keep their names — every deal won or lost is told by them.';
 export const STAGE_WEIGHT = 'Give each stage a default probability from 0 to 100.';
 export const stageNameTaken = (name) => `Another stage is named "${name}".`;
+export const STAGE_NOT_SAVED = (name) => `"${name}" is not one of the stages as saved — load the page again.`;
+export const STAGE_ONCE = (name) => `"${name}" is renamed twice — give it one name.`;
 export const stageReadsClosed = (name) => `"${name}" would read as a closed deal — name an open stage something else.`;
 
 const exactName = (s) => (typeof s === 'string' ? s : s && typeof s === 'object' && typeof s.name === 'string' ? s.name : '');
@@ -150,14 +152,64 @@ const heldNames = (stored) => {
     return held;
 };
 
+// The stored stage an entry says it was (`was` — the page's, on a row whose name changed); null: it says none. An entry of the
+// same name as a stored stage IS that stage — but where another entry says it was that one: then it is a new stage of the name.
+const wasOf = (s) => (s && typeof s === 'object' && typeof s.was === 'string' && s.was.trim() && s.was !== exactName(s) && s.was !== nameOf(s) ? s.was : null);
+// A name as the save stores it: one the stored list holds as it is, any other with no space round it.
+const storedName = (s, held) => (held.has(exactName(s)) ? exactName(s) : nameOf(s));
+// What a rename is refused for, in words: one of no stored stage, of one stage twice, or of or onto a close.
+function renameRefused(sent, stored) {
+    const own = orgStages({ funnelStages: stored }), seen = new Set();
+    for (const s of sent) {
+        const was = wasOf(s);
+        if (!was) continue;
+        if (CLOSED_STAGES.includes(was) || CLOSED_STAGES.includes(nameOf(s))) return KEEP_THE_CLOSES;
+        if (!own.includes(was)) return STAGE_NOT_SAVED(was);
+        if (seen.has(was)) return STAGE_ONCE(was);
+        seen.add(was);
+    }
+    return null;
+}
+// The renames a save makes: [{ from, to }] — the stage as stored, the name as the save stores it (state §0.302). Every one at
+// once: two stages may exchange names.
+export function stageRenames(sent, stored = []) {
+    const held = heldNames(stored);
+    return sent.map((s) => ({ from: wasOf(s), to: storedName(s, held) })).filter((r) => r.from);
+}
+// Of those, the ones a 'contains' condition follows: where the new name picks out exactly the stages the old one did. `Proposal`
+// renamed beside a `Proposal Review` that stays does not — the condition would let that one go.
+export function containedRenames(renames, rest) {
+    const has = (name, part) => name.toLowerCase().includes(part.toLowerCase());
+    const stages = [...rest.map((s) => ({ from: s, to: s })), ...renames];
+    return renames.filter((r) => stages.every((s) => has(s.from, r.from) === has(s.to, r.to)));
+}
+// A deal with the stages renamed — where it stands and its history (what the server does to its row); the same one where
+// nothing of it is. A saved view's stages.
+const renamed = (renames, name) => renames.find((r) => r.from === name)?.to ?? name;
+export function renamedDeal(deal, renames) {
+    const list = Array.isArray(deal?.stageHistory) ? deal.stageHistory : [];
+    const moved = (h) => !!h && typeof h === 'object' && (renamed(renames, h.stage) !== h.stage || renamed(renames, h.prevStage) !== h.prevStage);
+    if (!deal || (renamed(renames, deal.stage) === deal.stage && !list.some(moved))) return deal;
+    return { ...deal, stage: renamed(renames, deal.stage), ...(list.some(moved) ? { stageHistory: list.map((h) => (moved(h) ? { ...h, stage: renamed(renames, h.stage), prevStage: renamed(renames, h.prevStage) } : h)) } : {}) };
+}
+// The renames of the saves unanswered ({ list, renames } each) that the list as it now stands shows to have landed: all of a
+// save's, where the list is the one it sent — one name alone does not tell, where two exchanged theirs.
+export function renamesLanded(saves, list) {
+    const now = JSON.stringify(orgStages({ funnelStages: list }));
+    return saves.find((s) => JSON.stringify(orgStages({ funnelStages: s.list })) === now)?.renames ?? [];
+}
+export const renamedViews = (views, renames) => (Array.isArray(views) ? views.map((v) => (Array.isArray(v?.stage) ? { ...v, stage: v.stage.map((s) => renamed(renames, s)) } : v)) : views);
+
 // What a stages list a save sends is refused for, or null: { status: 400, error, field }. A name the stored list holds,
 // exactly, stands whatever it is — as often as it holds it, and no more: the page sends the whole list, and one such name
 // would refuse every save of it.
 export function stagesRefused(sent, stored = []) {
     const no = (error) => ({ status: 400, error, field: 'funnelStages' });
     if (!Array.isArray(sent)) return no(STAGES_A_LIST);
+    const badRename = renameRefused(sent, stored);
+    if (badRename) return no(badRename);
     const held = heldNames(stored);
-    const all = sent.map((s) => { const n = exactName(s), left = held.get(n) || 0; held.set(n, left - 1); return { name: nameOf(s), anew: left < 1, weight: s?.weight }; });
+    const all = sent.map((s) => { const n = exactName(s), left = held.get(n) || 0; held.set(n, left - 1); return { name: nameOf(s), anew: left < 1 || !!wasOf(s), weight: s?.weight }; });   // a stage renamed is named anew, whatever the stored list holds
     if (all.some((s) => !s.name)) return no(STAGE_NEEDS_NAME);
     if (all.some((s) => s.anew && s.name.length > STAGE_MAX)) return no(STAGE_TOO_LONG);
     if (!CLOSED_STAGES.every((c) => sent.some((s) => s && s.name === c))) return no(KEEP_THE_CLOSES);
@@ -173,13 +225,13 @@ export function stagesRefused(sent, stored = []) {
 // The list as it is stored: a name named anew with no space round it; one the stored list holds, as its deals hold it.
 export function stagesToStore(sent, stored = []) {
     const held = heldNames(stored);
-    return sent.map((s) => (held.has(s.name) ? { ...s } : { ...s, name: nameOf(s) }));
+    return sent.map(({ was: _was, ...s }) => (held.has(s.name) ? s : { ...s, name: nameOf(s) }));
 }
 
-// The stages a save drops: those the org has now and the list sent does not, by their exact names — a rename drops the name
-// the deals hold.
+// The stages a save drops: those the org has now that no entry is — by its exact name, or by the stage it says it was.
 export function removedStages(sent, stored) {
-    const kept = new Set(orgStages({ funnelStages: sent }));
+    const held = heldNames(stored);
+    const kept = new Set([...CLOSED_STAGES, ...sent.map((s) => wasOf(s) ?? storedName(s, held))]);
     return orgStages({ funnelStages: stored }).filter((s) => !kept.has(s));
 }
 
@@ -219,12 +271,21 @@ export function movedRow(rows, i, by) {
     [next[i], next[j]] = [next[j], next[i]];
     return next;
 }
-// How many deals are in a row's stage; whether its name is fixed — the two closes' always, one deals are in while it is what
-// they hold — and whether it may be taken out.
+// How many deals are in a row's stage; whether its name is fixed — the two closes' — whether it may be taken out; and what a
+// changed name carries, said under it (state §0.302).
 export const dealsIn = (row, byStage) => (row.was ? byStage[row.was] || 0 : 0);
-export const nameLocked = (row, byStage) => row.close || (dealsIn(row, byStage) > 0 && row.name === row.was);
+export const nameLocked = (row) => row.close;
+export const renameWords = (row, byStage) => {
+    if (row.close || !row.name.trim() || !wasOf(row)) return null;
+    const n = dealsIn(row, byStage);
+    return `Renames "${row.was}"${n ? ` — its ${n} deal${n === 1 ? '' : 's'} with it` : ''}`;
+};
 export const removable = (row, byStage) => !row.close && dealsIn(row, byStage) === 0;
 // What a typed default probability is: a whole number from 0 to 100.
 export const typedWeight = (v) => Math.max(0, Math.min(100, parseInt(v, 10) || 0));
-// What a save sends: the rows without what only the page reads. What a stage is — open, won, lost — is told by its name.
-export const stagesSent = (rows, stored) => stagesToStore(rows.map(({ was: _was, key: _key, close: _close, type: _type, color: _color, ...s }) => s), stored);
+// What a save sends: the rows without what only the page reads — but the stage a renamed one was. What a stage is — open,
+// won, lost — is told by its name.
+export const stagesSent = (rows, stored) => {
+    const list = rows.map(({ key: _key, close: _close, type: _type, color: _color, ...s }) => s);
+    return stagesToStore(list, stored).map((s, i) => (wasOf({ ...s, was: list[i].was }) ? { ...s, was: list[i].was } : s));
+};

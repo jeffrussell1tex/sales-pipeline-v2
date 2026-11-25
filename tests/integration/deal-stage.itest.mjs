@@ -170,7 +170,7 @@ test('a bulk save (an import\'s overwrite): the same rule, row by row; a refusal
 
 const save = (funnelStages, org = A) => call(settingsHandler, 'PUT', { funnelStages }, { org, role: 'Admin', user: ADMIN });
 
-test('Settings drops or renames no stage a deal of the org is in — an open or a closed one; another org\'s deals hold nothing; nothing written when refused', async () => {
+test('Settings drops no stage a deal of the org is in, nor takes a changed name that does not say which stage it was — an open or a closed one; another org\'s deals hold nothing; nothing written when refused', async () => {
     await reset();
     await db.insert(opportunities).values([
         stored('s1', 'Site visit', A), stored('s2', 'Site visit', A), stored('s3', 'Bid sent', A),
@@ -181,7 +181,7 @@ test('Settings drops or renames no stage a deal of the org is in — an open or 
     assert.deepEqual([r.status, r.body.error, r.body.code, r.body.field], [409, '"Site visit" still has 2 deals. Move them to another stage first.', 'inUse', 'funnelStages']);
     assert.deepEqual([await stagesOf(A), (await settingsRow(A)).stages], [STAGES_A, []], 'nothing written, in the key or its old column');
     assert.equal((await save([STAGES_A[0], ...CLOSES])).body.error, '"Site visit" still has 2 deals; "Bid sent" still has 1 deal. Move them to another stage first.');
-    assert.equal((await save(STAGES_A.map((s) => (s.name === 'Bid sent' ? { ...s, name: 'Bid out' } : s)))).status, 409, 'a rename drops the name its deals hold');
+    assert.equal((await save(STAGES_A.map((s) => (s.name === 'Bid sent' ? { ...s, name: 'Bid out' } : s)))).status, 409, 'a changed name that does not say which stage it was drops the one its deals hold');
     assert.equal((await save(STAGES_A.map((s) => (s.name === 'Bid sent' ? { ...s, name: 'bid sent' } : s)))).status, 409, 'so does another case of it');
     // One nothing of this org is in: dropped, renamed, another added, the order changed, the weights too.
     const next = [{ name: 'Bid sent', weight: 65 }, { name: ' Called ', weight: 5 }, { name: 'Site visit', weight: 40 }, ...CLOSES];

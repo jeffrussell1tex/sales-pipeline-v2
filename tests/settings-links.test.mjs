@@ -209,11 +209,12 @@ test('S9 — the settings PUT: read, the approvals, every list\'s shape, its lin
         'const extra = {',
         'const upsert = db.insert(settings).values({ ...dbRow, extra: { ...settingsSeeds(), ...patch, revs: newRevs } })',
         'const renaming = renames.map(({ id, name }) => db.update(users).set({ team: name, updatedAt: new Date() })',
-        'try { [landed, ...renamedRows] = await db.batch([upsert, ...renaming]); }',
+        'try { [landed, ...renamedRows] = await db.batch([upsert, ...renaming, ...carrying]); }',
         // Refused in its write: nothing renamed, no roster cache dropped, no audit (state §0.224).
         'if (!landed.length) {',
         'if (membersRenamed) invalidateRoster(orgId);',
-        "+ (membersRenamed ? `; ${membersRenamed} member(s) renamed with their team` : ''),",
+        "+ (membersRenamed ? `; ${membersRenamed} member(s) renamed with their team` : '')",
+        "+ (renamedStages.length ? `; renamed ${renamedStages.map((r) => `\"${r.from}\" to \"${r.to}\"`).join(', ')} (${carriedWords})` : ''),",
     ].map(at);
     assert.deepEqual(order, [...order].sort((a, b) => a - b), 'in this order');
     // The rename's guards (the review, 2 Nov): this org's members holding the team's id, only those not already so

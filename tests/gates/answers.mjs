@@ -648,6 +648,8 @@ export const ANSWERS = {
             ["a pipelines list without one an open deal is in", "409 role role role role role role out"],
             ["a stages list without the one a deal is in", "409 role role role role role role out"],
             ["a stages list without one of the old column's", "409 role role role role role role out"],
+            ["a stage renamed, its deals with it", "200 role role role role role role out"],
+            ["a rename of a stage not saved", "400 role role role role role role out"],
             ["a stages list with no open stage", "400 role role role role role role out"],
         ],
     },

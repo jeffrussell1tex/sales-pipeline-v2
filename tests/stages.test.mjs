@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import {
     orgStages, firstStageOf, stagesDrawn, stageNamed, stageToStore, stageRefusal, laneReader, categoryOf, categoryLabel, categoryWords, FORECAST_CATEGORIES, commitStagesOf, quoteReader, reopenStage,
     stagesRefused, stagesToStore, removedStages, stagesInUseWords, stageRowsOf, stagesSent, dealsByStage, movedRow, STAGE_MAX,
-    decideStages, addedRow, editedRow, removedRow, dealsIn, nameLocked, removable, typedWeight,
+    decideStages, addedRow, editedRow, removedRow, dealsIn, nameLocked, removable, typedWeight, renameWords, stageRenames, containedRenames, renamesLanded, renamedDeal, renamedViews, STAGE_NOT_SAVED, STAGE_ONCE, KEEP_THE_CLOSES,
 } from '../src/utils/stages.js';
 import { openStagesOf } from '../src/utils/stageOrder.js';
 import { stages as appStages } from '../src/utils/constants.js';
@@ -116,6 +116,63 @@ test('the lanes: a deal\'s own forecast category; with none, its stage — the l
     assert.deepEqual(quoted({}), ['Discovery', 'Evaluation (Demo)', 'Proposal', 'Negotiation/Review', 'Contracts', 'Old one']);
 });
 
+// What a rename carries (state §0.302); against a database, tests/integration/stage-rename.itest.mjs.
+test('a rename: the entry that says which stored stage it was; refused of a close, onto one, of none stored, of one twice; every one at once', () => {
+    const of = (names, more = []) => [...LIST.map((s) => (names[s.name] ? { ...s, name: names[s.name], was: s.name } : s)), ...more];
+    assert.deepEqual(stageRenames(of({ 'Bid sent': ' Quoted ' }), LIST), [{ from: 'Bid sent', to: 'Quoted' }]);
+    assert.deepEqual(stageRenames(of({ 'Bid sent': 'Verbal', Verbal: 'Bid sent' }), LIST), [{ from: 'Bid sent', to: 'Verbal' }, { from: 'Verbal', to: 'Bid sent' }]);
+    assert.deepEqual(stageRenames([{ name: 'Bid ', was: 'A' }, { name: 'B', was: 'Bid ' }], [{ name: 'A' }, { name: 'Bid ' }]), [{ from: 'A', to: 'Bid ' }, { from: 'Bid ', to: 'B' }], 'a stored name is the one stored');
+    for (const was of [undefined, null, '', '  ', 7, {}, 'Bid sent']) assert.deepEqual(stageRenames([{ name: 'Bid sent', was }], LIST), [], JSON.stringify(was));
+    assert.deepEqual([stageRenames([{ name: ' Bid sent ', was: 'Bid sent' }], LIST), stageRenames(['Bid sent', null, 5], LIST)], [[], []]);
+    const error = (sent, stored = LIST) => stagesRefused(sent, stored)?.error ?? null;
+    assert.deepEqual([error(of({ 'Bid sent': 'Quoted' })), error(of({ 'Bid sent': 'Verbal', Verbal: 'Bid sent' })), error(of({ 'Bid sent': 'bid SENT' }))], [null, null, null]);
+    assert.equal(error(of({ 'Closed Won': 'Won it' })), KEEP_THE_CLOSES);
+    assert.equal(error([...LIST.slice(0, 3), { name: 'Closed Won', was: 'Verbal', weight: 100 }, LIST[5]]), KEEP_THE_CLOSES, "REGRESSION: an open stage's deals are won");
+    assert.equal(error(of({}, [{ name: 'Re-won', was: 'Closed Won', weight: 5 }])), KEEP_THE_CLOSES, "REGRESSION: every deal won is open");
+    for (const was of ['Nope', 'bid sent', 'Bid sent ']) assert.equal(error(of({}, [{ name: 'New', was, weight: 5 }])), STAGE_NOT_SAVED(was), 'the stored name, exactly');
+    assert.equal(error(of({ Verbal: 'One' }, [{ name: 'Two', was: 'Verbal', weight: 5 }])), STAGE_ONCE('Verbal'));
+    assert.match(STAGE_NOT_SAVED('Nope'), /"Nope" is not one of the stages as saved/);
+    // A name the stored list holds twice, or one that reads as closed, is no name for another stage.
+    const twice = [{ name: 'A', weight: 1 }, { name: 'B', weight: 1 }, { name: 'B', weight: 1 }, ...CLOSES], odd = [{ name: 'A', weight: 1 }, { name: 'won', weight: 1 }, ...CLOSES];
+    assert.equal(error([{ name: 'B', was: 'A', weight: 1 }, { name: 'B', weight: 1 }, ...CLOSES], twice), 'Another stage is named "B".', "REGRESSION: two stages' deals become one's");
+    assert.match(error([{ name: 'won', was: 'A', weight: 1 }, ...CLOSES], odd), /would read as a closed deal/);
+    // A 'contains' condition follows where the new name picks out what the old one did.
+    const kept = (renames, rest) => containedRenames(renames, rest).map((r) => r.from);
+    assert.deepEqual([kept([{ from: 'Proposal', to: 'Quote' }], ['Lead in']), kept([{ from: 'Proposal', to: 'Quote' }], ['proposal review']), kept([{ from: 'Proposal', to: 'Quote' }], ['QUOTE sent']), kept([{ from: 'Proposal', to: 'Quote' }, { from: 'Proposal Review', to: 'Quote Review' }], ['A']), kept([{ from: 'Proposal', to: 'Quote' }, { from: 'Proposal Review', to: 'Check' }], ['A'])], [['Proposal'], [], [], ['Proposal', 'Proposal Review'], ['Proposal Review']]);
+    const of2 = (...n) => n.map((name) => ({ name })), chain = { list: of2('B', 'D', 'C'), renames: [{ from: 'A', to: 'B' }, { from: 'B', to: 'D' }] }, swap = { list: of2('B', 'A'), renames: [{ from: 'A', to: 'B' }, { from: 'B', to: 'A' }] };
+    assert.deepEqual([renamesLanded([swap, chain], of2('B', 'D', 'C')), renamesLanded([swap, chain], of2('B', 'A')), renamesLanded([swap], of2('A', 'B')), renamesLanded([swap, chain], of2('B', 'D')), renamesLanded([], of2('A')), renamesLanded([chain], null)], [chain.renames, swap.renames, [], [], [], []], "REGRESSION: half of a chain");
+    // What it drops: a renamed stage is not dropped, whatever it is called; one whose name another takes is.
+    assert.deepEqual([removedStages(of({ 'Bid sent': 'Quoted' }), LIST), removedStages(of({ 'Bid sent': 'Verbal', Verbal: 'Bid sent' }), LIST)], [[], []]);
+    assert.deepEqual(removedStages(of({ 'Bid sent': 'Verbal' }).filter((s) => s.was || s.name !== 'Verbal'), LIST), ['Verbal'], "REGRESSION: another stage's deals are taken for its own");
+    assert.deepEqual(removedStages(of({ 'Bid sent': 'Quoted' }, [{ name: 'Bid sent', weight: 1 }]), LIST), []);
+    assert.deepEqual([removedStages(LIST.map((s) => ({ ...s, name: ` ${s.name} ` })), LIST), removedStages([{ name: 'Bid ' }], [{ name: 'Bid ' }, { name: 'C' }])], [[], ['C']], 'as it is stored');
+    // Stored, and sent: what the page alone reads left out, the stage a row was only where it is renamed.
+    assert.deepEqual(stagesToStore(of({ 'Bid sent': ' Quoted ' }), LIST)[2], { name: 'Quoted', weight: 70 });
+    const rows = stageRowsOf(LIST);
+    assert.deepEqual(stagesSent(editedRow(rows, 'st_2', 'name', ' Quoted '), LIST).slice(1, 3), [{ name: 'Site visit', weight: 40 }, { name: 'Quoted', weight: 70, was: 'Bid sent' }]);
+    assert.ok(!stagesSent(editedRow(rows, 'st_2', 'name', ' Bid sent '), LIST).some((s) => 'was' in s));
+});
+
+test("a renamed stage in the app's copy: the deal's stage and its history, the rest as it was; a browser's saved views", () => {
+    const renames = [{ from: 'A', to: 'B' }, { from: 'B', to: 'C' }];
+    const deal = { id: 'd', stage: 'A', probability: 30, stageHistory: [{ stage: 'A', prevStage: 'B', date: 'x' }, null, 'A', { stage: 'D', prevStage: 'A' }, { stage: 'D' }] };
+    assert.deepEqual(renamedDeal(deal, renames), { id: 'd', stage: 'B', probability: 30, stageHistory: [{ stage: 'B', prevStage: 'C', date: 'x' }, null, 'A', { stage: 'D', prevStage: 'B' }, { stage: 'D' }] });
+    for (const same of [{ stage: 'D', stageHistory: [{ stage: 'D' }] }, { stage: 'a' }, { stage: 'D', stageHistory: 'A' }, null, undefined]) assert.equal(renamedDeal(same, renames), same);
+    assert.deepEqual([renamedDeal({ stage: 'B' }, renames), renamedDeal({ stage: 'D', stageHistory: [{ stage: 'B', prevStage: 'D' }] }, renames)], [{ stage: 'C' }, { stage: 'D', stageHistory: [{ stage: 'C', prevStage: 'D' }] }]);
+    assert.equal(renamedDeal({ stage: 'A', stageHistory: deal.stageHistory.slice(4) }, renames).stageHistory.length, 1);
+    assert.deepEqual(renamedViews([{ id: 1, stage: ['A', 'D'], rep: ['A'] }, { id: 2 }, null, { stage: 'A' }], renames), [{ id: 1, stage: ['B', 'D'], rep: ['A'] }, { id: 2 }, null, { stage: 'A' }]);
+    assert.deepEqual([renamedViews(null, renames), renamedViews('x', renames)], [null, 'x']);
+    // The server's statements, as they stand: what they write is run by the integration suite alone (SQL) — a change here is run there
+    // before this list is changed with it.
+    const r = code('netlify/functions/_stageRename.mjs');
+    assert.deepEqual(r.slice(r.indexOf('const listOf = ')).trimEnd().split('\n'), RENAME_SQL);
+    const s = code('netlify/functions/settings.mjs');
+    for (const x of ['stageRenameStatements({ orgId, renames: renamedStages, rest: restStages, rev: newRevs.funnelStages }) : [];', 'const restStages = heldStages ? orgStages({ funnelStages: heldStages }).filter((s) => !goneStages.includes(s) && !renamedStages.some((r) => r.from === s)) : [];', "const many = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;", 'const [dealsCarried, historiesCarried, rulesCarried, reportsCarried] = renamedRows.splice(renaming.length).map((rows) => rows.length);', "`${many(dealsCarried, 'deal')}, ${many(rulesCarried, 'automation')}, ${many(reportsCarried, 'saved report')}`", 'renamed: { deals: dealsCarried, histories: historiesCarried, automations: rulesCarried, reports: reportsCarried }']) assert.equal(count(s, x), 1, x);
+    const page = code('src/Tabs/settings/salesProcess/FunnelStagesDetail.jsx');
+    assert.ok(page.includes("const renameSavedViews = (orgId, renames) => {\n    const key = 'pipelineSavedViews:' + (orgId || 'none');\n    try { const held = localStorage.getItem(key); if (held) localStorage.setItem(key, JSON.stringify(renamedViews(JSON.parse(held), renames))); }") && code('src/Tabs/PipelineTab.jsx').includes("const savedViewsKey = 'pipelineSavedViews:' + (activeOrgId || 'none');"), 'the key PipelineTab reads');
+    assert.ok(code('netlify/functions/opportunities.mjs').includes("if (!move) for (const k of ['stage', 'stageChangedDate', 'wonDate', 'lostReason', 'lostCategory', 'lostDate', 'probability']) if (k === 'stage' || k === 'stageChangedDate' || !(k in data)) delete updateData[k];") && code('netlify/functions/opportunities.mjs').includes('const stageChanged = !!move && upserted.stage !== previousStage;'), 'a save that moves no stage writes none, nor what follows one, and says no move');
+});
+
 test('a deal reopened goes to a stage the org has: the one it was closed from in this window, the one its latest close left, else the last open one', () => {
     const own = orgStages(ORG);
     const history = [{ stage: 'Closed Lost', prevStage: 'Lead in' }, { stage: 'Site visit', prevStage: 'Closed Lost' }, null, { stage: 'Closed Won', prevStage: 'Bid sent' }, { stage: 'Verbal', prevStage: 'Closed Won' }];
@@ -173,7 +230,7 @@ test('a stages list a save sends: what is refused, each in its words; the app\'s
 test('what a save drops, by the exact name its deals hold, and the words while any deal is in it', () => {
     assert.deepEqual(removedStages(LIST, LIST), []);
     assert.deepEqual(removedStages([LIST[3], LIST[0], ...CLOSES], LIST), ['Site visit', 'Bid sent']);
-    assert.deepEqual(removedStages(LIST.map((s) => (s.name === 'Verbal' ? { ...s, name: 'verbal' } : s)), LIST), ['Verbal'], 'a rename, another case of it too');
+    assert.deepEqual(removedStages(LIST.map((s) => (s.name === 'Verbal' ? { ...s, name: 'verbal' } : s)), LIST), ['Verbal'], 'a changed name that does not say which stage it was, another case of it too');
     assert.deepEqual(removedStages(LIST, []), APP.slice(0, 6), 'the app\'s own where none was stored');
     assert.deepEqual(removedStages(LIST.slice(0, 4), LIST), [], 'the closes are always there');
     assert.deepEqual(stagesToStore([{ name: '  Verbal ', weight: 5, x: 1 }]), [{ name: 'Verbal', weight: 5, x: 1 }]);
@@ -212,9 +269,11 @@ test('the page: a row added before the closes, edited, taken out, moved among th
     assert.equal(names(movedRow(typed, 2, -1)), 'A,Closed Won,B,Closed Won,Closed Lost', 'a row added here is an open one, whatever is typed in it');
     const n = dealsByStage([{ stage: 'A' }, { stage: 'A' }, { stage: 'Closed Won' }, null, {}]);
     assert.deepEqual([n, dealsByStage(null)], [{ A: 2, 'Closed Won': 1 }, {}]);
-    assert.deepEqual([...rows, two[2]].map((r) => [dealsIn(r, n), nameLocked(r, n), removable(r, n)]), [[2, true, false], [0, false, true], [1, true, false], [0, true, false], [0, false, true]]);
-    const renamed = editedRow(rows, 'st_0', 'name', 'Lead');
-    assert.deepEqual([nameLocked(renamed[0], n), removable(renamed[0], n)], [false, false], 'a name typed before a deal came in can be typed back');
+    assert.deepEqual([...rows, two[2]].map((r) => [dealsIn(r, n), nameLocked(r, n), removable(r, n)]), [[2, false, false], [0, false, true], [1, true, false], [0, true, false], [0, false, true]]);
+    const named = (i, name) => renameWords(editedRow(rows, rows[i].key, 'name', name)[i], n);
+    assert.deepEqual([named(0, 'Lead'), named(1, ' Lead '), named(0, 'A'), named(0, ' A '), named(0, '  '), renameWords(two[2], n), named(2, 'Won it')], ['Renames "A" — its 2 deals with it', 'Renames "B"', null, null, null, null, null]);
+    assert.equal(renameWords(editedRow(rows, 'st_0', 'name', 'Lead')[0], { A: 1 }), 'Renames "A" — its 1 deal with it');
+    assert.equal(removable(editedRow(rows, 'st_0', 'name', 'Lead')[0], n), false, 'renamed or not, its deals are in it');
     assert.deepEqual(['5', '150', '-3', '', 'x', '12.9', 7].map(typedWeight), [5, 100, 0, 0, 0, 12, 7]);
 });
 
@@ -334,33 +393,80 @@ test('THE GUARD: every write of a deal asks the one rule, in order, and answers 
     assert.equal(count(l, "    if (!how.create && !rows.some((r) => r && typeof r === 'object' && 'stage' in r)) return { rows };\n    const funnelStages = await funnelInOrg(orgId);"), 1);
     assert.ok(l.includes('const list = row?.funnelStages ?? row?.stages;') && l.includes('return Array.isArray(list) && list.length ? list : DEFAULT_SETTINGS.funnelStages;'), 'the saved list, else the old column, else the app\'s own');
     order(s, 'const stale = sent.checked', "const heldStages = 'funnelStages' in data ? funnelStagesOf(existing[0]) : null;", 'const badStages = heldStages ? stagesRefused(data.funnelStages, heldStages) : null;',
-        'if (badStages) return { statusCode: badStages.status, headers, body: JSON.stringify({ error: badStages.error, field: badStages.field }) };', 'if (heldStages) data.funnelStages = stagesToStore(data.funnelStages, heldStages);',
-        'const goneStages = heldStages ? removedStages(data.funnelStages, heldStages) : [];', 'if (goneStages.length) {', '.where(and(eq(opportunities.orgId, orgId), inArray(opportunities.stage, goneStages)));', 'const held = stagesInUseWords(goneStages, dealsByStage(rows));',
+        'if (badStages) return { statusCode: badStages.status, headers, body: JSON.stringify({ error: badStages.error, field: badStages.field }) };', 'const goneStages = heldStages ? removedStages(data.funnelStages, heldStages) : [];',
+        'const renamedStages = heldStages ? stageRenames(data.funnelStages, heldStages) : [];', 'if (heldStages) data.funnelStages = stagesToStore(data.funnelStages, heldStages);', 'if (goneStages.length) {', '.where(and(eq(opportunities.orgId, orgId), inArray(opportunities.stage, goneStages)));', 'const held = stagesInUseWords(goneStages, dealsByStage(rows));',
         "if (held) return { statusCode: 409, headers, body: JSON.stringify({ error: held, code: 'inUse', field: 'funnelStages' }) };", 'const linked = await checkSettingsLinks(');
 });
 
 test('THE GUARD: the Funnel stages page names, orders and removes a stage — none a deal is in — and draws no control that does nothing', () => {
     const p = code('src/Tabs/settings/salesProcess/FunnelStagesDetail.jsx');
     for (const x of [
-        'const { opportunities } = useApp();', 'const saved = stageRowsOf(settings?.funnelStages);', 'const [rows, setRows]     = useState(saved);', 'const counts = dealsByStage(opportunities);',
+        'const { opportunities, setOpportunities, loadOpportunities, activeOrgId } = useApp();', 'const unproven = React.useRef([]);', 'if (e.unknown) unproven.current = [...unproven.current, { list: stagesToStore(stages, settings?.funnelStages), renames: stageRenames(stages, settings?.funnelStages) }];',
+        '            unproven.current = [];\n', 'const afterLatest = async () => {\n        loadOpportunities();\n', 'const ours = renamesLanded(unproven.current, list);\n        if (ours.length) renameSavedViews(activeOrgId, ours);\n    };', 'setSettings(prev => { done(prev?.funnelStages); return prev; })', 'const saved = stageRowsOf(settings?.funnelStages);', 'const [rows, setRows]     = useState(saved);', 'const counts = dealsByStage(opportunities);',
         'const change = (fn) => { setRows(fn); setDirty(true); };', 'const update = (key, field, val) => change(prev => editedRow(prev, key, field, val));',
         'const addStage = () => { const n = added.current += 1; change(prev => addedRow(prev, n)); };', 'headAction={<button onClick={addStage}',
-        'const n = dealsIn(s, counts);', 'const locked = nameLocked(s, counts);', 'const fixed = s.close;', '{locked\n', 'key: s.key,',
+        'const n = dealsIn(s, counts);', 'const locked = nameLocked(s);', 'const words = renameWords(s, counts);', 'flexShrink:0, maxWidth:150 }}>{words}</span>}', 'const fixed = s.close;', '{locked\n', 'key: s.key,',
         'const up = movedRow(rows, i, -1) !== rows, down = movedRow(rows, i, 1) !== rows;', 'order: fixed ? null : (', 'disabled={!up}', 'disabled={!down}',
         "onChange={e => update(s.key, 'name', e.target.value)}", "onChange={e => update(s.key, 'weight', typedWeight(e.target.value))}", 'remove: removable(s, counts) ? <button', 'onClick={() => change(prev => removedRow(prev, s.key))}',
         'onClick={() => change(prev => movedRow(prev, i, -1))}', 'onClick={() => change(prev => movedRow(prev, i, 1))}',
         'const stages = stagesSent(rows, settings?.funnelStages);', 'const words = stagesRefused(stages, settings?.funnelStages)?.error;', 'if (words) { setSaveError(words); throw new Error(words); }',
-        'setRows(stageRowsOf(stages));', 'setSaveError(e.message);', '<fieldset disabled={saving}', 'const added = React.useRef(0);', 'const openStages = rows.filter(r => !r.close);', 'const colorOf = (r) => palette[r.close ? r.name : r.key];',
+        'setRows(stageRowsOf(kept));', 'setSaveError(e.message);', '<fieldset disabled={saving}', 'const added = React.useRef(0);', 'const openStages = rows.filter(r => !r.close);', 'const colorOf = (r) => palette[r.close ? r.name : r.key];',
         "{!s.close ? 'Open' : s.name === 'Closed Won' ? 'Won' : 'Lost'}", 'maxLength={STAGE_MAX}', 'autoFocus={!s.was}', 'if (setSettingsDirty) setSettingsDirty(dirty); return', 'useRegisterSave(settingsSaveRef, dirty, handleSave);', 'primaryAction={handleSave}', 'value={s.weight}',
         "const handleCancel = () => { if (saving) return; setRows(saved); setDirty(false); setSaveError(''); };",
         'deals: <span style={{ fontSize:12, color:T.inkMid, fontVariantNumeric:\'tabular-nums\' }}>{n}</span>,',
     ]) assert.equal(count(p, x), 1, x);
     for (const gone of ['SPDrag', 'Probability display', 'Rep-adjustable', 'All pipelines', '⋯', '<select', 'type="color"', 'Disabling a stage']) assert.ok(!p.includes(gone), gone);
     // The save, from its first line to its last.
-    const save = ['setSaving(true);', 'await putSettings({ funnelStages: stages }, opened);', 'setSettings(prev => ({ ...prev, funnelStages: stages }));', 'landed(answer);', 'setRows(stageRowsOf(stages));', "setSaveError('');", 'setDirty(false);', 'if (e.stale && await panelStale(e)) throw e;', 'setSaveError(e.message);', 'setSaving(false);', 'throw e;', '        setSaving(false);\n    });'];
-    let at = p.indexOf('const handleSave = once(');
+    const save = ['setSaving(true);', 'await putSettings({ funnelStages: stages }, opened);', 'const kept = stagesToStore(stages, settings?.funnelStages), renames = stageRenames(stages, settings?.funnelStages);', 'setSettings(prev => ({ ...prev, funnelStages: kept }));', 'if (renames.length) {', 'setOpportunities(prev => prev.map(d => renamedDeal(d, renames)));', 'renameSavedViews(activeOrgId, renames);', 'landed(answer);', 'setRows(stageRowsOf(kept));', "setSaveError('');", 'setDirty(false);', 'if (e.stale && await panelStale(e)) throw e;', 'setSaveError(e.message);', 'setSaving(false);', 'throw e;', '        setSaving(false);\n    };'];
+    let at = p.indexOf('    const save = async () => {');
+    assert.ok(at > 0 && count(p, '    const handleSave = once(async () => {\n        try { await save(); } catch (e) { if (e.tookLatest) await afterLatest(); throw e; }\n    });') === 1);
     for (const x of save) { const i = p.indexOf(x, at + 1); assert.ok(i > at, x); at = i; }
     assert.equal(count(p, 'setSaving(false);'), 2);
     assert.ok(read('src/Tabs/settings/salesProcess/shared.jsx').includes('<div key={row.key ?? i} style'), 'a row keeps its own element where it moves');
     assert.ok(p.indexOf('if (words)') !== -1 && p.indexOf('if (words)') < p.indexOf('await putSettings('), 'the rule is asked before anything is sent');
 });
+
+const RENAME_SQL = [
+    "const listOf = (v) => sql`(case when jsonb_typeof(${v}) = 'array' then ${v} else '[]'::jsonb end)`;",
+    "const entries = (list) => sql`generate_series(0, jsonb_array_length(${list}) - 1) as g(n), lateral (select ${list} -> g.n as e) as t`;",
+    "",
+    "export function stageRenameStatements({ orgId, renames, rest, rev }) {",
+    "    const exact = sql`${JSON.stringify(Object.fromEntries(renames.map((r) => [r.from, r.to])))}::jsonb`;",
+    "    const taken = new Set(rest.map((s) => s.toLowerCase()));",
+    "    const folded = sql`${JSON.stringify(Object.fromEntries(renames.filter((r) => !taken.has(r.from.toLowerCase())).map((r) => [r.from.toLowerCase(), r.to])))}::jsonb`;",
+    "    const part = sql`${JSON.stringify(Object.fromEntries(containedRenames(renames, rest).map((r) => [r.from.toLowerCase(), r.to])))}::jsonb`;",
+    "    const targets = sql`${JSON.stringify(Object.fromEntries(renames.map((r) => [r.to, 1])))}::jsonb`;",
+    "    const written = sql`exists (select 1 from ${settings} where ${settings.orgId} = ${orgId} and ${settings.extra}->'revs'->>'funnelStages' = ${rev}::text)`;",
+    "    const names = (v) => sql`coalesce(${exact}->>(${v}), ${folded}->>lower(btrim(${v})))`;",
+    "",
+    "    const history = listOf(opportunities.stageHistory);",
+    "    const isMove = sql`(jsonb_typeof(e) = 'object' and (jsonb_exists(${exact}, e->>'stage') or jsonb_exists(${exact}, e->>'prevStage')))`;",
+    "    const key = (k) => sql`(case when jsonb_exists(${exact}, e->>${sql.raw(`'${k}'`)}) then jsonb_build_object(${sql.raw(`'${k}'`)}, ${exact}->>(e->>${sql.raw(`'${k}'`)})) else '{}'::jsonb end)`;",
+    "",
+    "    const asked = sql`(case when e->>'operator' = 'contains' then ${part}->>lower(e->>'value') else coalesce(${exact}->>(e->>'value'), ${folded}->>lower(e->>'value')) end)`;",
+    "    const condition = sql`(jsonb_typeof(e) = 'object' and e->>'field' in ('stage', 'from_stage', 'to_stage') and e->>'operator' in ('eq', 'neq', 'contains')",
+    "        and jsonb_typeof(e->'value') = 'string' and ${asked} is not null)`;",
+    "",
+    "    const where = sql`${savedReports.filters}->'where'`;",
+    "    const oneName = sql`(jsonb_typeof(e->'value') = 'string' and ${names(sql`e->>'value'`)} is not null)`;",
+    "    const inList = sql`(jsonb_typeof(e->'value') = 'array' and exists (select 1 from jsonb_array_elements(${listOf(sql`e->'value'`)}) as i(v) where jsonb_typeof(i.v) = 'string' and ${names(sql`i.v #>> '{}'`)} is not null))`;",
+    "    const filter = sql`(jsonb_typeof(e) = 'object' and e->>'id' = 'stage' and (${oneName} or ${inList}))`;",
+    "",
+    "    const days = sql`${settings.extra} #> '{dealModel,usual,stageDays}'`;",
+    "    return [",
+    "        db.update(opportunities).set({ stage: sql`${exact}->>(${opportunities.stage})` })",
+    "            .where(and(eq(opportunities.orgId, orgId), written, sql`jsonb_exists(${exact}, ${opportunities.stage})`)).returning({ id: opportunities.id }),",
+    "        db.update(opportunities).set({ stageHistory: sql`(select jsonb_agg(case when ${isMove} then e || ${key('stage')} || ${key('prevStage')} else e end order by g.n) from ${entries(history)})` })",
+    "            .where(and(eq(opportunities.orgId, orgId), written, sql`exists (select 1 from jsonb_array_elements(${history}) as t(e) where ${isMove})`)).returning({ id: opportunities.id }),",
+    "        db.update(automations).set({ conditions: sql`(select jsonb_agg(case when ${condition} then jsonb_set(e, '{value}', to_jsonb(${asked})) else e end order by g.n) from ${entries(listOf(automations.conditions))})` })",
+    "            .where(and(eq(automations.orgId, orgId), written, sql`exists (select 1 from jsonb_array_elements(${listOf(automations.conditions)}) as t(e) where ${condition})`)).returning({ id: automations.id }),",
+    "        db.update(savedReports).set({ filters: sql`jsonb_set(${savedReports.filters}, '{where}', (select jsonb_agg(case when ${filter} and jsonb_typeof(e->'value') = 'string' then jsonb_set(e, '{value}', to_jsonb(${names(sql`e->>'value'`)}))",
+    "                when ${filter} then jsonb_set(e, '{value}', (select jsonb_agg(case when jsonb_typeof(i.v) = 'string' then to_jsonb(coalesce(${names(sql`i.v #>> '{}'`)}, i.v #>> '{}')) else i.v end order by i.k) from generate_series(0, jsonb_array_length(${listOf(sql`e->'value'`)}) - 1) as j(k), lateral (select ${listOf(sql`e->'value'`)} -> j.k as v, j.k as k) as i)) else e end order by g.n)",
+    "            from ${entries(listOf(where))}))` })",
+    "            .where(and(eq(savedReports.orgId, orgId), written, sql`exists (select 1 from jsonb_array_elements(${listOf(where)}) as t(e) where ${filter})`)).returning({ id: savedReports.id }),",
+    "        db.update(settings).set({ extra: sql`jsonb_set(${settings.extra}, '{dealModel,usual,stageDays}', (select jsonb_object_agg(coalesce(${exact}->>d.k, d.k), d.v) from jsonb_each(${days}) as d(k, v) where jsonb_exists(${exact}, d.k) or not jsonb_exists(${targets}, d.k)))` })",
+    "            .where(and(eq(settings.orgId, orgId), sql`${settings.extra}->'revs'->>'funnelStages' = ${rev}::text`, sql`jsonb_typeof(${days}) = 'object'`,",
+    "                sql`exists (select 1 from jsonb_each(case when jsonb_typeof(${days}) = 'object' then ${days} else '{}'::jsonb end) as d(k, v) where jsonb_exists(${exact}, d.k))`)).returning({ id: settings.id }),",
+    "    ];",
+    "}",
+];

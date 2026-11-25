@@ -761,6 +761,9 @@ export const handler = async (event) => {
             // The notes and the history are never in the update (state §0.236): a note posted, or a move appended,
             // between this request's read and its write would be written over. A move appends in SQL, to what is stored.
             const { id, comments: _notes, stageHistory: _history, ...updateData } = clean;
+            // A save that moves no stage writes none, nor what follows one (state §0.302): a stage renamed, or a move landed, since the
+            // read stands whole — never the new stage beside the old one's dates.
+            if (!move) for (const k of ['stage', 'stageChangedDate', 'wonDate', 'lostReason', 'lostCategory', 'lostDate', 'probability']) if (k === 'stage' || k === 'stageChangedDate' || !(k in data)) delete updateData[k];
             if (!closeNamed) { delete updateData.forecastedCloseDate; if (!('closeQuarter' in data)) delete updateData.closeQuarter; }
             // §0.250: a save that lands as an insert (the deal deleted between its read and its write) keeps the maker it read; the body never names it.
             const mine = await ownerWriteFilter({ table: opportunities, entity: 'opportunity', orgId, userId, userRole });   // only while still the caller's or nobody's (state §0.275)
@@ -790,7 +793,7 @@ export const handler = async (event) => {
             }
 
             const rep          = upserted.salesRep;
-            const stageChanged = previousStage && upserted.stage !== previousStage;
+            const stageChanged = !!move && upserted.stage !== previousStage;   // this save's own move: one renamed, or moved by another, since the read is not (state §0.302)
             // Who acted, by their member name — never the Clerk id, which the emails printed (state §0.240, finding 3);
             // "Someone" for a caller with no member row, as the texts and Slack say. A rep is not emailed about their
             // own move (Jeff, 10 Nov: "Skip own moves"), by owner id — the name was compared to a Clerk id, so every

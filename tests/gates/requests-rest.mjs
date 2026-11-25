@@ -175,6 +175,8 @@ const settingsSaves = [
     { what: 'a pipelines list without one an open deal is in', method: 'PUT', body: { pipelines: [{ id: 'p1', name: 'One' }] }, rows: inUse('Proposal', 'p2') },
     { what: 'a stages list without the one a deal is in', method: 'PUT', body: { funnelStages: [{ name: 'Bid sent', weight: 50 }, ...CLOSES] }, rows: inUse('Site visit', 'p1') },
     { what: "a stages list without one of the old column's", method: 'PUT', body: { funnelStages: [{ name: 'Bid sent', weight: 50 }, ...CLOSES] }, rows: { settings: [{ id: 'org_a', orgId: 'org_a', extra: {}, stages: [{ name: 'Old one', weight: 5 }, ...CLOSES] }], opportunities: [{ id: 'd1', orgId: 'org_a', stage: 'Old one', pipelineId: 'p1' }] } },
+    { what: 'a stage renamed, its deals with it', method: 'PUT', body: { funnelStages: [{ name: 'Visit', was: 'Site visit', weight: 20 }, { name: 'Bid sent', weight: 50 }, ...CLOSES] }, rows: inUse('Site visit', 'p1') },
+    { what: 'a rename of a stage not saved', method: 'PUT', body: { funnelStages: [{ name: 'Visit', was: 'Nope', weight: 20 }, { name: 'Bid sent', weight: 50 }, ...CLOSES] }, rows: inUse('Site visit', 'p1') },
     { what: 'a stages list with no open stage', method: 'PUT', body: { funnelStages: CLOSES }, rows: inUse('Closed Won', 'p1') },
 ];
 

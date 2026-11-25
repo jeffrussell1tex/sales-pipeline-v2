@@ -9,14 +9,20 @@ import { SPTable } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { useApp } from '../../../AppContext';
 import { stagePalette } from '../../../utils/stageOrder.js';
-import { STAGE_MAX, stagesRefused, stageRowsOf, stagesSent, dealsByStage, dealsIn, nameLocked, removable, addedRow, editedRow, removedRow, movedRow, typedWeight } from '../../../utils/stages.js';
+import { STAGE_MAX, stagesRefused, stageRowsOf, stagesSent, dealsByStage, dealsIn, nameLocked, removable, renameWords, stageRenames, stagesToStore, renamedDeal, renamedViews, renamesLanded, addedRow, editedRow, removedRow, movedRow, typedWeight } from '../../../utils/stages.js';
 
 const plain = { background:'none', border:'none', padding:'2px 5px', fontSize:13, lineHeight:1, color:T.inkMid, cursor:'pointer', fontFamily:T.sans };
 const iconButton = (off) => (off ? { ...plain, color:T.border, cursor:'default' } : plain);
 const nameInput = { width:'100%', padding:'4px 8px', fontSize:13, fontWeight:600, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:T.sans, boxSizing:'border-box' };
 
+// The Pipeline tab's saved views live in this browser (PipelineTab.jsx): a renamed stage's go with it.
+const renameSavedViews = (orgId, renames) => {
+    const key = 'pipelineSavedViews:' + (orgId || 'none');
+    try { const held = localStorage.getItem(key); if (held) localStorage.setItem(key, JSON.stringify(renamedViews(JSON.parse(held), renames))); } catch { /* storage refused: the views keep the old name */ }
+};
+
 export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
-    const { opportunities } = useApp();   // the deals, read before this page is drawn (PanelGate, state §0.299)
+    const { opportunities, setOpportunities, loadOpportunities, activeOrgId } = useApp();   // the deals, read before this page is drawn (PanelGate, state §0.299)
     // Each stage's weight is what the app reads (Q7): a stored stage holds name and weight. A workspace with none saved shows
     // the app's own (Jeff, 17 Nov, Q7).
     const saved = stageRowsOf(settings?.funnelStages);
@@ -25,6 +31,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
     const added = React.useRef(0);
+    const unproven = React.useRef([]);   // the saves whose answer proved nothing: what each sent, and renamed
 
     const counts = dealsByStage(opportunities);
     const change = (fn) => { setRows(fn); setDirty(true); };
@@ -35,7 +42,15 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
     // The tokens as this panel opened (state §0.226): its save sends them, a landed save merges what it answered, and a
     // save refused because another landed first remounts the panel on the latest (J-B5).
     const { opened, landed, panelStale, once } = usePanelRevs(settings, setSettings);
-    const handleSave = once(async () => {
+    // A rename of another's landed first, or one of this page's own did unanswered: the deals are read again, and this browser's
+    // saved views follow the page's own where the latest list shows it landed (state §0.302).
+    const afterLatest = async () => {
+        loadOpportunities();
+        const list = await new Promise(done => setSettings(prev => { done(prev?.funnelStages); return prev; }));
+        const ours = renamesLanded(unproven.current, list);
+        if (ours.length) renameSavedViews(activeOrgId, ours);
+    };
+    const save = async () => {
         const stages = stagesSent(rows, settings?.funnelStages);
         // The server's own rule, said before anything is sent (state §0.299; src/utils/stages.js).
         const words = stagesRefused(stages, settings?.funnelStages)?.error;
@@ -44,15 +59,23 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
         try {
             const answer = await putSettings({ funnelStages: stages }, opened);
             // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
-            setSettings(prev => ({ ...prev, funnelStages: stages }));
+            const kept = stagesToStore(stages, settings?.funnelStages), renames = stageRenames(stages, settings?.funnelStages);
+            setSettings(prev => ({ ...prev, funnelStages: kept }));
+            // What the save renamed on the server, in the app's copy of the deals and this browser's saved views (state §0.302).
+            if (renames.length) {
+                setOpportunities(prev => prev.map(d => renamedDeal(d, renames)));
+                renameSavedViews(activeOrgId, renames);
+            }
+            unproven.current = [];
             landed(answer);
-            setRows(stageRowsOf(stages));
+            setRows(stageRowsOf(kept));
             setSaveError('');
             setDirty(false);
         } catch (e) {
             // Another save landed first (state §0.226): AdminView takes the latest and remounts this panel, its words above
             // it. Unread, the server's words below and the draft kept.
             if (e.stale && await panelStale(e)) throw e;
+            if (e.unknown) unproven.current = [...unproven.current, { list: stagesToStore(stages, settings?.funnelStages), renames: stageRenames(stages, settings?.funnelStages) }];
             // Keep the panel dirty: the change was not saved, or may not have been (an answer that proved nothing, said as
             // maybe — state §0.264); clearing the
             // flag here is what made a 403 look like success.
@@ -67,6 +90,9 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
             throw e;
         }
         setSaving(false);
+    };
+    const handleSave = once(async () => {
+        try { await save(); } catch (e) { if (e.tookLatest) await afterLatest(); throw e; }
     });
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -90,7 +116,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                 <div>
                     <CSectionCard
                         title="Deal stages"
-                        description="The stages a deal moves through, in order. A deal's own forecast category says whether it is commit or best case; with none set, the last two open stages are commit and the one before them best case. A stage with deals in it keeps its name — move them first to rename or remove it. History, automations, saved views and reports that name a stage you rename or remove keep its old name."
+                        description="The stages a deal moves through, in order. A deal's own forecast category says whether it is commit or best case; with none set, the last two open stages are commit and the one before them best case. Renaming a stage renames it on its deals, in their history, and in the automations and saved reports that name it. A stage with deals in it is not removed — move them first."
                         headAction={<button onClick={addStage} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ Add stage</button>}
                     >
                         <SPTable
@@ -105,7 +131,8 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                             rows={rows.map((s, i) => {
                                 const fixed = s.close;
                                 const n = dealsIn(s, counts);
-                                const locked = nameLocked(s, counts);
+                                const locked = nameLocked(s);
+                                const words = renameWords(s, counts);
                                 const called = s.name || 'the new stage';
                                 const up = movedRow(rows, i, -1) !== rows, down = movedRow(rows, i, 1) !== rows;
                                 return {
@@ -121,6 +148,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                                         {locked
                                             ? <b style={{ fontFamily:T.sans }}>{s.name}</b>
                                             : <input aria-label={s.was ? `Name of ${s.was}` : 'Name of the new stage'} value={s.name} maxLength={STAGE_MAX} placeholder="Stage name" autoFocus={!s.was} onChange={e => update(s.key, 'name', e.target.value)} style={nameInput}/>}
+                                        {words && <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans, flexShrink:0, maxWidth:150 }}>{words}</span>}
                                     </span>,
                                     weight: <input type="number" min="0" max="100" aria-label={`Default probability of ${called}`} value={s.weight}
                                         onChange={e => update(s.key, 'weight', typedWeight(e.target.value))}

@@ -28,7 +28,8 @@ import { teamNameRefused, teamRenames } from '../../src/utils/teamMembership.js'
 import { aiSettingsRefused } from '../../src/utils/aiModels.js';
 import { pipelinesRefused, removedPipelines, inUseWords } from '../../src/utils/pipelines.js';
 import { isOpenDeal } from '../../src/utils/contactDeals.js';
-import { stagesRefused, stagesToStore, removedStages, dealsByStage, stagesInUseWords } from '../../src/utils/stages.js';
+import { orgStages, stagesRefused, stagesToStore, stageRenames, removedStages, dealsByStage, stagesInUseWords } from '../../src/utils/stages.js';
+import { stageRenameStatements } from './_stageRename.mjs';
 import { funnelStagesOf } from './_dealScore.mjs';
 // The org's default tax rate a save names (state §0.242): a percent, checked by the quote money's one rule.
 import { percentRefused } from '../../src/utils/quoteTotals.js';
@@ -383,14 +384,16 @@ const handle = async (event, retry) => {
                 const held = inUseWords(gonePipes, open);
                 if (held) return { statusCode: 409, headers, body: JSON.stringify({ error: held, code: 'inUse', field: 'pipelines' }) };
             }
-            // The deal stages (state §0.299): names of their own, the two closes and an open one among them, each weight 0 to 100; and
-            // none dropped or renamed while a deal of this org is in it — open or closed, a stage has no other to count in —
+            // The deal stages (state §0.299): names of their own, the two closes and an open one among them, each weight 0 to 100; one
+            // renamed carries what names it (state §0.302); and none dropped while a deal of this org is in it — open or closed, a stage has no other to count in —
             // judged by the list as it stands, the old column's or the app's own where none was saved.
             const heldStages = 'funnelStages' in data ? funnelStagesOf(existing[0]) : null;
             const badStages = heldStages ? stagesRefused(data.funnelStages, heldStages) : null;
             if (badStages) return { statusCode: badStages.status, headers, body: JSON.stringify({ error: badStages.error, field: badStages.field }) };
-            if (heldStages) data.funnelStages = stagesToStore(data.funnelStages, heldStages);
             const goneStages = heldStages ? removedStages(data.funnelStages, heldStages) : [];
+            const renamedStages = heldStages ? stageRenames(data.funnelStages, heldStages) : [];
+            const restStages = heldStages ? orgStages({ funnelStages: heldStages }).filter((s) => !goneStages.includes(s) && !renamedStages.some((r) => r.from === s)) : [];
+            if (heldStages) data.funnelStages = stagesToStore(data.funnelStages, heldStages);
             if (goneStages.length) {
                 const rows = await db.select({ stage: opportunities.stage }).from(opportunities)
                     .where(and(eq(opportunities.orgId, orgId), inArray(opportunities.stage, goneStages)));
@@ -579,8 +582,11 @@ const handle = async (event, retry) => {
             if (putSeam.beforeWrite) await putSeam.beforeWrite();
             // An org's first two saves at once can both insert: the second meets the row the first made, by its id or its
             // org (one row per org) — a lost race, as a refused write is.
+            // A renamed stage carries its deals, their history, the automations, the saved reports and the deal model (state
+            // §0.302), in the same transaction, each only while the list as stored is this save's.
+            const carrying = renamedStages.length ? stageRenameStatements({ orgId, renames: renamedStages, rest: restStages, rev: newRevs.funnelStages }) : [];
             let landed = [], renamedRows = [];
-            try { [landed, ...renamedRows] = await db.batch([upsert, ...renaming]); }
+            try { [landed, ...renamedRows] = await db.batch([upsert, ...renaming, ...carrying]); }
             catch (err) { if (!lostFirstInsert(err)) throw err; }
             // Nothing landed: another save changed a key this one writes since this read. Nothing of it was written — no
             // member renamed, no audit. A save that named none of its tokens (Q6 — accepted unchecked), or whose own keys
@@ -592,7 +598,10 @@ const handle = async (event, retry) => {
                 if ((!sent.checked || !moved.some((k) => sentKeys.includes(k))) && retry < 2) return handle(event, retry + 1);
                 return { statusCode: 409, headers, body: JSON.stringify({ error: STALE_ERROR, code: 'stale', stale: moved }) };
             }
+            const [dealsCarried, historiesCarried, rulesCarried, reportsCarried] = renamedRows.splice(renaming.length).map((rows) => rows.length);
             const membersRenamed = renamedRows.reduce((n, rows) => n + rows.length, 0);
+            const many = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;
+            const carriedWords = `${many(dealsCarried, 'deal')}, ${many(rulesCarried, 'automation')}, ${many(reportsCarried, 'saved report')}`;
             if (membersRenamed) invalidateRoster(orgId);
 
             // Audit the write. Org-wide config changes are exactly the kind of
@@ -611,14 +620,16 @@ const handle = async (event, retry) => {
                     : `Updated: ${changedKeys.slice(0, 20).join(', ') || '(no fields)'}`)
                     // A save that renamed members says how many, whatever else it did (state §0.222): a stale tab's list
                     // put back renames them too.
-                    + (membersRenamed ? `; ${membersRenamed} member(s) renamed with their team` : ''),
+                    + (membersRenamed ? `; ${membersRenamed} member(s) renamed with their team` : '')
+                    + (renamedStages.length ? `; renamed ${renamedStages.map((r) => `"${r.from}" to "${r.to}"`).join(', ')} (${carriedWords})` : ''),
                 userId,
                 userName: callerName,
             });
 
             // The new tokens of the keys the save SENT — the screen holds their values. A key the server derived is not
             // answered: the screen does not hold its new value, so its next save of it is refused once and reads the latest.
-            return { statusCode: 200, headers, body: JSON.stringify({ success: true, anthropicApiKeySet: !!encryptedApiKey, revs: pick(newRevs, sentKeys) }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ success: true, anthropicApiKeySet: !!encryptedApiKey, revs: pick(newRevs, sentKeys),
+                ...(renamedStages.length ? { renamed: { deals: dealsCarried, histories: historiesCarried, automations: rulesCarried, reports: reportsCarried } } : {}) }) };
         }
 
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };

@@ -4933,6 +4933,18 @@ THE GUARD: tests/gate-matrix.test.mjs.
 
 THE GUARD: tests/failed-reads.test.mjs (every function as every role, the caller's read rejected; each other read rejected alone); tests/integration/failed-reads.itest.mjs.
 
+## 18b145. A Stage's Rename Carries What Names It (hard rule)
+
+**Origin (§0.302, 25 Nov 2026 — OPEN_ITEMS §4.2; Jeff: "yes").** Everything that names a stage names it by text; a rename left all of it behind, so a stage with deals kept its name.
+
+1. **A rename is named**: the entry sends `was`, the stored name exactly (`stageRenames`, src/utils/stages.js) — never guessed from two lists. Of a stored open stage, once, never of or onto a close, its name judged as new.
+2. **It is carried in the save's own batch**, after the list, each statement this org's and only while the list as stored is this save's (its minted token) — netlify/functions/_stageRename.mjs. Every rename at once, through one map: two stages may exchange names. **A new store of stage names gets its statement here.**
+3. **It is no move**: no event, no email, no probability, no clock.
+4. **A deal's single save that moves no stage writes none, nor what follows one it does not name** (a bulk save still fills a row's stage from its read — OPEN_ITEMS §4.2); what it says of a stage goes by its own move — never by comparing its read with the row it got back.
+5. The SQL file is held whole (RENAME_SQL, tests/stages.test.mjs): change it, run tests/integration/stage-rename.itest.mjs, then the list.
+
+Left by it: OPEN_ITEMS §4.2.
+
 ## 18b144. One Forecast: A Deal's Own Category, Else Its Stage (hard rule)
 
 **Origin (§0.301, 25 Nov 2026 — OPEN_ITEMS §4.2; Jeff: "yes").** Home and Reports read a deal's own forecast category, the Pipeline tab and its List its stage alone: one deal, two commits.
@@ -4962,7 +4974,7 @@ THE GUARD: tests/deal-probability.test.mjs, tests/integration/deal-probability.i
 1. **The org's stages are read through src/utils/stages.js** — `orgStages`, `firstStageOf`, `laneReader`, `commitStagesOf`, `quoteReader`, `reopenStage` — by the Pipeline tab, the deal window, Quotes, the deal import, Funnel stages and the two writes; Home reads `laneReader` too; Reports, the report engine and its prompt read stageOrder.js's order, which it stands on (Reports its lanes by `laneReader` — §18b144); the score reads `funnelStagesOf`; Settings' card and a new pipeline's copy, the stored list. Closed Won and Closed Lost are always of it, last, by those names. No open stage's name is written into code that decides on deals (the class scan, tests/stages.test.mjs — lists, comparisons and defaults; three files named: the app's own list twice, and the momentum alert, filed); colours and the email badge still go by name.
 2. **The Pipeline tab's board, funnel and stage filter draw every stage a deal there is in** (`stagesDrawn`; the board and funnel without Closed Lost): one off the list has a column, a row, an option — it is no drop target and no step between two others. The deal window's ribbon and Reports' funnels draw the org's alone.
 3. **A write names a stage of the org's, in the org's spelling** (`checkStages`, the deals endpoint's four writes; a backup's restore is not asked): refused otherwise, nothing written; a create naming none is made in the first; a blank on a save is not named; the one the deal has is never asked — but the org's own spelling named exactly is a move onto it. A bulk row the caller may not save, or that the org does not hold, refuses nothing: a refusal never tells of a deal they cannot read.
-4. **A stages save is the whole list, judged as the deals hold it**: exact names. A rename drops the name its deals hold, so a stage with any deal in it — a closed one too, there is no other to count in — is neither dropped nor renamed. A name the stored list holds, exactly and as often as it holds it, is never asked again for its length, a twin or reading as closed; a blank name, every weight (a whole 0–100), the two closes and an open stage are asked of every save.
+4. **A stages save is the whole list, judged as the deals hold it**: exact names. A stage with any deal in it — a closed one too, there is no other to count in — is not dropped; a changed name sent without `was` is a drop, and a rename (an entry's `was`) carries its deals (§18b145). A name the stored list holds, exactly and as often as it holds it, is never asked again for its length, a twin or reading as closed — but on an entry that says it was another stage it is; a blank name, every weight (a whole 0–100), the two closes and an open stage are asked of every save.
 5. **The page sends what it draws**: one row a name, keyed apart, its rules the server's own (`stagesRefused`) said before anything is sent, its controls held while a save is out.
 
 THE GUARD: tests/stages.test.mjs, tests/integration/deal-stage.itest.mjs. Left by it: OPEN_ITEMS §4.2.

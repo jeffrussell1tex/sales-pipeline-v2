@@ -115,7 +115,7 @@ test('R3 — the settings PUT: what the save loaded read off the body, the read,
         'const upsert = db.insert(settings)',
         'const renaming = renames.map(',
         'if (putSeam.beforeWrite) await putSeam.beforeWrite();',
-        'try { [landed, ...renamedRows] = await db.batch([upsert, ...renaming]); }',
+        'try { [landed, ...renamedRows] = await db.batch([upsert, ...renaming, ...carrying]); }',
         'catch (err) { if (!lostFirstInsert(err)) throw err; }',
         'if (!landed.length) {',
         'const moved = compared.filter((k) => (revsOf(now?.extra)[k] ?? null) !== (readRevs[k] ?? null));',
@@ -165,7 +165,7 @@ test('R4 — the PUT writes the patch alone, merged in SQL, compared on the toke
     assert.ok(s.includes("const changedKeys = Object.keys(data).filter(k => k !== 'anthropicApiKey' && (written.includes(k) || COLUMN_KEYS.includes(k)));"));
     // The answers: the GET every token; the 200 those of the keys sent, never a derived key's.
     assert.ok(s.includes('                revs: revsOf(row.extra),'), 'the GET answers the tokens');
-    assert.ok(s.includes("body: JSON.stringify({ success: true, anthropicApiKeySet: !!encryptedApiKey, revs: pick(newRevs, sentKeys) }) };"), 'REGRESSION: a token answered for a value the screen does not hold');
+    assert.ok(s.includes("body: JSON.stringify({ success: true, anthropicApiKeySet: !!encryptedApiKey, revs: pick(newRevs, sentKeys),\n                ...(renamedStages.length ? { renamed: "), 'REGRESSION: a token answered for a value the screen does not hold');
 });
 
 // ── R5 — the SQL ──────────────────────────────────────────────────────────────
@@ -209,6 +209,7 @@ const WRITERS = {
     'netlify/functions/_links.mjs': { insert: 0, update: 2, why: 'removeWithLists and clearSettingsLinks: extraPatched, guarded on what they read (R6)' },
     'netlify/functions/score-leads-batch.mjs': { insert: 0, update: 1, why: 'scoreOrg: the rules alone, guarded on them as read (train-now.test.mjs)' },
     'netlify/functions/_dealScore.mjs': { insert: 0, update: 1, why: 'scoreOrgDeals: dealModel alone, guarded on it as read; no token — no screen saves the key (deal-score-server.test.mjs)' },
+    'netlify/functions/_stageRename.mjs': { insert: 0, update: 1, why: "a renamed stage's key of dealModel, in the PUT's batch, only while its token is the save's; no token — no screen saves the key (stages.test.mjs)" },
     'netlify/functions/integration-requests.mjs': { insert: 1, update: 1, why: 'one request merged while none is stored; no token — no screen saves the key, Q15 (connected-apps.test.mjs)' },
     'scripts/seed-qa-org.mjs': { insert: 0, update: 1, why: 'the keys it adds, while missing, with tokens (qa-seed.test.mjs)' },
 };
