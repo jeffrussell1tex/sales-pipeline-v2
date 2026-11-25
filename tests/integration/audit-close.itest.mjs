@@ -380,7 +380,7 @@ test('a job\'s createdBy is the caller\'s and survives a re-POST; no body sets c
 test('update_field on a task event writes the task\'s deal; a task with no deal is a skipped action, not an ok one', async () => {
     await dispatchAutomations(A, 'task.completed', taskEventData({ id: 'task_itest_aclose_x', title: 'Done', opportunityId: 'opp_itest_aclose_pat' }));
     const [deal] = await db.select().from(opportunities).where(eq(opportunities.id, 'opp_itest_aclose_pat'));
-    assert.equal(deal.forecastCategory, 'Commit', 'the task\'s deal — the action wrote a deal with the TASK\'s id, i.e. none');
+    assert.equal(deal.forecastCategory, 'commit', 'the task\'s deal — the action wrote a deal with the TASK\'s id, i.e. none');
     await dispatchAutomations(A, 'task.completed', taskEventData({ id: 'task_itest_aclose_y', title: 'No deal' }));
     const runs = await db.select().from(automationRuns).where(eq(automationRuns.orgId, A));
     const lone = runs.find((r) => r.triggeredBy === 'task_itest_aclose_y');
@@ -388,7 +388,7 @@ test('update_field on a task event writes the task\'s deal; a task with no deal 
     assert.match(lone.error || '', /update_field: skipped — no deal on this event/);
     await dispatchAutomations(A, 'task.completed', taskEventData({ id: 'task_itest_aclose_z', title: 'Another org\'s deal', opportunityId: 'opp_itest_aclose_b' }));
     const [bDeal] = await db.select().from(opportunities).where(eq(opportunities.id, 'opp_itest_aclose_b'));
-    assert.notEqual(bDeal.forecastCategory, 'Commit', 'org B\'s deal is untouched');
+    assert.notEqual(bDeal.forecastCategory, 'commit', 'org B\'s deal is untouched');
     const crossed = (await db.select().from(automationRuns).where(eq(automationRuns.orgId, A))).find((r) => r.triggeredBy === 'task_itest_aclose_z');
     assert.equal(crossed.actionsExecuted, 0, 'no row written is not ok');
     assert.match(crossed.error || '', /update_field: skipped — the deal is not in this workspace/);

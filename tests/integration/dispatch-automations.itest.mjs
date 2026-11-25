@@ -95,7 +95,7 @@ before(async () => {
             conditions: [{ field: 'days_silent', operator: 'gte', value: 14 }],
             actions: [
                 { type: 'update_field', params: { entity: 'opportunity', field: 'orgId', value: B } },
-                { type: 'update_field', params: { entity: 'opportunity', field: 'forecastCategory', value: 'At risk' } },
+                { type: 'update_field', params: { entity: 'opportunity', field: 'forecastCategory', value: 'Best Case' } },
                 { type: 'send_email',   params: { subject: '{{opportunity_name}} silent {{days_silent}}d', body: 'Hi {{sales_rep}} <b>' } },
                 { type: 'send_slack',   params: { message: '{{opportunity_name}} has been silent {{days_silent}} days' } },
             ],
@@ -154,7 +154,7 @@ test('a silent deal: update_field cannot hand the deal to another org, the allow
 
     const after = await oppRow();
     assert.equal(after.orgId, A, 'REGRESSION: the org write is refused');
-    assert.equal(after.forecastCategory, 'At risk', 'the allowlisted write landed');
+    assert.equal(after.forecastCategory, 'best_case', 'the allowlisted write landed, as the deal window stores it (§0.301)');
 
     const runs = await runsFor(A, 'auto_itest_A_silent');
     assert.equal(runs.length, 1);

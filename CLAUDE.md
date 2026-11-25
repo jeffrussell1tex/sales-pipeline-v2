@@ -361,6 +361,8 @@ One commit per verified batch; doc patch in the same commit.
   takes the stage's default unless the rep set their own, a close its own; on the app's screens one with none counts and reads at its stage's default
   (`countedProbability`); an edit sends the stage, what follows it, and the probability only once pressed or typed in its window, or once a save naming the
   stage went out from it (THE GUARD, tests/deal-probability.test.mjs).
+- A deal counts in the forecast by its own category, else its stage — one rule on every screen (§0.301, guide §18b144; `laneReader`, src/utils/stages.js); an
+  edit leaves the category out until one was pressed in its window; an automation stores one of the four (none when its value is blank) or is refused (THE GUARD, tests/stages.test.mjs).
 - A dispatch customer is found by one rule, on the screen and the server
   (`src/utils/dispatchCustomer.js`, guide §18b104): the deal's account by
   its link (`accountForDeal`), then the one customer linked to it — never

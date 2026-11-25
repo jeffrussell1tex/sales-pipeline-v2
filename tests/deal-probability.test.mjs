@@ -140,7 +140,7 @@ test('THE GUARD: the deal window, the app\'s copy and the screens read it by the
         'const stageTouched = useRef(false), probTouched = useRef(false);', "if (field === 'probability') probTouched.current = true;", "...(stageTouched.current ? [] : ['stage']),", "...(probTouched.current || stageWentOut.current ? [] : ['probability']),",
         'probability: opportunity?.id && !stageTouched.current ? formData.probability ?? null : countedProbability(formData, settings?.funnelStages), closeQuarter,', 'const prob = countedProbability(formData, settings?.funnelStages);', '· {probabilityText(prob)} probability',
         'const defaultProb = defaultOf(settings?.funnelStages, formData.stage);', 'const effectiveProb = countedProbability(formData, settings?.funnelStages);', 'const stageDefault = defaultOf(settings?.funnelStages, formData.stage);',
-        'probability: null, arr: 0, implementationCost: 0,', 'const prevProbRef = useRef(null);', "value={(effectiveProb !== null && effectiveProb !== undefined && !isNaN(effectiveProb)) ? effectiveProb : ''}",
+        'probability: null, forecastCategory: null, arr: 0, implementationCost: 0,', 'const prevProbRef = useRef(null);', "value={(effectiveProb !== null && effectiveProb !== undefined && !isNaN(effectiveProb)) ? effectiveProb : ''}",
         "onChange={e => { const val = e.target.value === '' ? null : Math.min(100, Math.max(0, parseInt(e.target.value) || 0)); handleChange('probability', val); }}", "onClick={() => handleChange('probability', null)}",
         '{!isOverridden && defaultProb !== null && <span', '{isOverridden && defaultProb !== null && (',
         'const isOverridden = (formData.probability ?? null) !== null && formData.probability !== defaultProb;',
@@ -152,14 +152,14 @@ test('THE GUARD: the deal window, the app\'s copy and the screens read it by the
     assert.ok(k.includes('body: JSON.stringify({ id: newOpp.id, stage: newOpp.stage, stageChangedDate: newOpp.stageChangedDate }),'), 'the board names none: the server decides from the deal as stored');
     assert.equal(count(lv, 'const funnelStages = settings?.funnelStages;'), 1);
     const qSummary = new Function('countedProbability', lv.slice(lv.indexOf('function qSummary('), lv.indexOf('\n}', lv.indexOf('function qSummary(')) + 2) + '\nreturn qSummary;')(countedProbability);
-    assert.deepEqual(qSummary([{ arr: 100, stage: 'Bid sent', probability: null }, { arr: '50', stage: 'Lead in', probability: 20 }, { arr: 'x', stage: 'Bid sent', probability: 90 }, { arr: 10, stage: 'Unset' }], ['Bid sent'], LIST), { total: 160, weighted: 80, commit: 100, count: 4 });
+    assert.deepEqual(qSummary([{ arr: 100, stage: 'Bid sent', probability: null }, { arr: '50', stage: 'Lead in', probability: 20 }, { arr: 'x', stage: 'Bid sent', probability: 90 }, { arr: 10, stage: 'Unset' }], (o) => (o.stage === 'Bid sent' ? 'commit' : 'best'), LIST), { total: 160, weighted: 80, commit: 100, count: 4 });
     const cut = (from, to) => p.slice(p.indexOf(from), p.indexOf(to, p.indexOf(from)) + to.length);
     const header = new Function('pipelineFilteredOpps', 'countedProbability', 'settings', cut('const weightedARR ', '/ 100), 0);') + '\nreturn weightedARR;');
     assert.equal(header([{ arr: 100, stage: 'Bid sent' }, { arr: 50, stage: 'Lead in', probability: 20 }, { arr: 1000, stage: 'Closed Won' }, { arr: 1000, stage: 'Closed Lost', probability: 60 }], countedProbability, { funnelStages: LIST }), 80, 'open deals alone');
     const exported = new Function('o', 'countedProbability', 'settings', cut('const weightedVal', '.toFixed(0);') + '\nreturn weightedVal;');
     assert.deepEqual([{ arr: '200', stage: 'Bid sent' }, { arr: 200, stage: 'Bid sent', probability: 15 }, { stage: 'Bid sent' }].map((o) => exported(o, countedProbability, { funnelStages: LIST })), ['140', '30', '0']);
     assert.ok(p.includes("o.probability + '%',") && /probability \+ '%',[^\n]*\n\s+weightedVal,\n/.test(read('src/Tabs/PipelineTab.jsx')), 'the weighted column beside it');
-    assert.deepEqual([count(lv, '((countedProbability(o, funnelStages) ?? 0) / 100)'), count(lv, 'qSummary(g.opps, commitStages, funnelStages)'), count(lv, 'qSummary(activeGroup.opps, commitStages, funnelStages)'), count(lv, 'funnelStages={settings?.funnelStages}')], [1, 1, 1, 1]);
+    assert.deepEqual([count(lv, '((countedProbability(o, funnelStages) ?? 0) / 100)'), count(lv, 'qSummary(g.opps, laneOf, funnelStages)'), count(lv, 'qSummary(activeGroup.opps, laneOf, funnelStages)'), count(lv, 'funnelStages={settings?.funnelStages}')], [1, 1, 1, 1]);
     assert.equal(count(p, '(countedProbability(o, settings?.funnelStages) ?? 0) / 100)'), 2, 'the header\'s weighted, and the export\'s');
     assert.equal(count(code('netlify/functions/opportunities.mjs'), '    probability:        data.probability         ?? null,'), 1);
     const ad = code('src/Tabs/settings/integrations/AutomationsDetail.jsx');

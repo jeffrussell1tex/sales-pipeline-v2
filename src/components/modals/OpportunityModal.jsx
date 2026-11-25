@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { orgStages, firstStageOf, reopenStage } from '../../utils/stages.js';
+import { orgStages, firstStageOf, reopenStage, FORECAST_CATEGORIES, categoryOf, categoryWords } from '../../utils/stages.js';
 import { defaultOf, countedProbability, pressedProbability, probabilityText } from '../../utils/dealProbability.js';
 import { parseLocalDate, daysSince } from '../../utils/dateLocal';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
@@ -105,6 +105,14 @@ const RoleBadge = ({ role }) => (
         {role}
     </span>
 );
+
+// The forecast categories' colours as chosen (the list is stages.js's).
+const CATEGORY_TONES = {
+    commit:    { bg: 'rgba(42,38,34,0.08)',  fg: T.ink,    bd: T.borderStrong },
+    best_case: { bg: 'rgba(58,90,122,0.10)', fg: T.info,   bd: 'rgba(58,90,122,0.35)' },
+    pipeline:  { bg: T.surface2,             fg: T.inkMid, bd: T.border },
+    omit:      { bg: 'rgba(156,58,46,0.07)', fg: T.danger, bd: 'rgba(156,58,46,0.28)' },
+};
 
 // Signal chip — AI insight
 const SIGNAL = {
@@ -1089,7 +1097,7 @@ export default function OpportunityModal({
         const base = opportunity || {
             opportunityName: '', account: '', site: '', salesRep: '',
             painPoints: '', contacts: '', stage: firstStageOf(settings),
-            probability: null, arr: 0, implementationCost: 0,
+            probability: null, forecastCategory: null, arr: 0, implementationCost: 0,
             forecastedCloseDate: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
             products: '', unionized: 'No', notes: '', nextSteps: '',
             pipelineId: activePipelineId || 'default',
@@ -1146,6 +1154,8 @@ export default function OpportunityModal({
     // An edit sends the stage, and the probability, only once each was pressed or typed here (state §0.300) — back again too, as
     // the pipeline: a newer one stands, and a move that names no probability takes the server's, from the deal as stored.
     const stageTouched = useRef(false), probTouched = useRef(false);
+    // The forecast category likewise (state §0.301): a rule may have set it since.
+    const categoryTouched = useRef(false);
     // Once a save that named the stage went out, the next names the probability too: its answer may have been lost, and the deal
     // moved by it.
     const stageWentOut = useRef(false);
@@ -1249,6 +1259,7 @@ export default function OpportunityModal({
     const handleChange = (field, value) => {
         if (validationErrors[field]) setValidationErrors(prev => { const n = {...prev}; delete n[field]; return n; });
         if (field === 'probability') probTouched.current = true;
+        if (field === 'forecastCategory') categoryTouched.current = true;
         if (field === 'stage') {
             stageTouched.current = true;
             setFormData({ ...formData, [field]: value, probability: pressedProbability(opportunity, formData, probTouched.current || stageWentOut.current, value, settings?.funnelStages) });   // the server's rule for a board move (state §0.300)
@@ -1333,6 +1344,7 @@ export default function OpportunityModal({
             ...(pipelinePicked.current ? [] : ['pipelineId']),
             ...(stageTouched.current ? [] : ['stage']),
             ...(probTouched.current || stageWentOut.current ? [] : ['probability']),
+            ...(categoryTouched.current ? [] : ['forecastCategory']),
         ];
         if (stageTouched.current) stageWentOut.current = true;
         onSave(leaveOut({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id, ...(resolvedAccount.site != null ? { site: resolvedAccount.site } : {}), arr: parseFloat(formData.arr) || 0, probability: opportunity?.id && !stageTouched.current ? formData.probability ?? null : countedProbability(formData, settings?.funnelStages), closeQuarter, contactIds: selectedContactIds }, left));
@@ -1944,20 +1956,16 @@ export default function OpportunityModal({
                                     <div style={{ marginBottom: 16 }}>
                                         <label style={{ ...fieldLabelStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
                                             Forecast Category
-                                            <span style={{ fontSize: 10, color: T.inkMuted, fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontFamily: T.sans }}>drives Reports forecast</span>
+                                            <span style={{ fontSize: 10, color: T.inkMuted, fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontFamily: T.sans }}>drives commit and best case</span>
                                         </label>
                                         <div style={{ display: 'flex', gap: 6 }}>
-                                            {[
-                                                { value: 'commit',    label: 'Commit',    bg: 'rgba(42,38,34,0.08)',  fg: T.ink,    bd: T.borderStrong,         hint: 'High confidence — counts in forecast' },
-                                                { value: 'best_case', label: 'Best Case', bg: 'rgba(58,90,122,0.10)', fg: T.info,   bd: 'rgba(58,90,122,0.35)', hint: 'Upside — possible but not certain' },
-                                                { value: 'pipeline',  label: 'Pipeline',  bg: T.surface2,             fg: T.inkMid, bd: T.border,               hint: 'Too early to call' },
-                                                { value: 'omit',      label: 'Omit',      bg: 'rgba(156,58,46,0.07)', fg: T.danger, bd: 'rgba(156,58,46,0.28)', hint: 'Excluded from forecast' },
-                                            ].map(({ value, label, bg, fg, bd, hint }) => {
-                                                const sel = (formData.forecastCategory || 'pipeline') === value;
+                                            {FORECAST_CATEGORIES.map(({ value, label, hint }) => {
+                                                const { bg, fg, bd } = CATEGORY_TONES[value];
+                                                const sel = categoryOf(formData) === value;
                                                 return (
                                                     <button key={value} type="button"
-                                                        title={hint}
-                                                        onClick={() => handleChange('forecastCategory', value)}
+                                                        title={sel ? `${hint} · press again for none` : hint}
+                                                        onClick={() => handleChange('forecastCategory', sel ? null : value)}
                                                         style={{
                                                             flex: 1, padding: '7px 4px',
                                                             border: `1.5px solid ${sel ? bd : T.border}`,
@@ -1974,10 +1982,7 @@ export default function OpportunityModal({
                                             })}
                                         </div>
                                         <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 4, fontFamily: T.sans }}>
-                                            {formData.forecastCategory === 'commit'    && 'Rep is confident this deal closes this period.'}
-                                            {formData.forecastCategory === 'best_case' && 'Best Case — upside if everything goes right.'}
-                                            {formData.forecastCategory === 'omit'      && 'Excluded from all forecast calculations.'}
-                                            {(!formData.forecastCategory || formData.forecastCategory === 'pipeline') && 'Pipeline — tracking but not yet forecastable.'}
+                                            {categoryWords(formData, settings)}
                                         </div>
                                     </div>
 

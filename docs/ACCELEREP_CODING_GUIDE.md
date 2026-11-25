@@ -4933,6 +4933,17 @@ THE GUARD: tests/gate-matrix.test.mjs.
 
 THE GUARD: tests/failed-reads.test.mjs (every function as every role, the caller's read rejected; each other read rejected alone); tests/integration/failed-reads.itest.mjs.
 
+## 18b144. One Forecast: A Deal's Own Category, Else Its Stage (hard rule)
+
+**Origin (§0.301, 25 Nov 2026 — OPEN_ITEMS §4.2; Jeff: "yes").** Home and Reports read a deal's own forecast category, the Pipeline tab and its List its stage alone: one deal, two commits.
+
+1. **One rule, src/utils/stages.js**: `laneReader(settings)(deal)` — its category first, then its stage; closed is none. No screen reads `forecastCategory` or the fallback stages to decide.
+2. **The four are `FORECAST_CATEGORIES`**; any case, and spaces, hyphens or underscores between the words, is read as one (`categoryOf`), a screen says it by `categoryLabel`, a rule stores it by `categoryToStore`. A word off the list is pipeline, and said.
+3. **None is none**: the window shows none chosen, says where it counts, and takes one off.
+4. **An edit leaves the category out until one was pressed in that window** (§18b143 rule 4's reason).
+
+THE GUARD: tests/stages.test.mjs (CATEGORY_READS: a new read is a decision to look at). Left by it: OPEN_ITEMS §4.2.
+
 ## 18b143. A Deal's Probability Is None Or A Whole Number From 0 To 100; An Edit Sends A Stage Or A Probability Only Once Pressed There (hard rule)
 
 **Origin (§0.300, 25 Nov 2026 — OPEN_ITEMS §4.2; Jeff: "Keep working", "yes to your deal with no probability questions").** Any whole number was stored, a fraction was a 500 (but on a bulk create), a file's "0" erased one, a deal with none was NaN on the screen and nothing in the weighted; the window sent its own copy of the stage and the probability back over newer ones on every edit.
@@ -4948,7 +4959,7 @@ THE GUARD: tests/deal-probability.test.mjs, tests/integration/deal-probability.i
 
 **Origin (§0.299, 25 Nov 2026 — OPEN_ITEMS §4.3; Jeff: "Leave it, keep working").** Three lists of stages were drawn at once: the org's (Settings, the deal window, Reports), one written into the app (the board, the funnel, the filter) and each screen's own names for commit, best case and "need a quote". A stage an Admin added had no column; the server stored any name at all.
 
-1. **The org's stages are read through src/utils/stages.js** — `orgStages`, `firstStageOf`, `laneReader`, `commitStagesOf`, `quoteReader`, `reopenStage` — by the Pipeline tab, the deal window, Quotes, the deal import, Funnel stages and the two writes; Home, Reports, the report engine and its prompt read stageOrder.js's order, which it stands on; the score reads `funnelStagesOf`; Settings' card and a new pipeline's copy, the stored list. Closed Won and Closed Lost are always of it, last, by those names. No open stage's name is written into code that decides on deals (the class scan, tests/stages.test.mjs — lists, comparisons and defaults; three files named: the app's own list twice, and the momentum alert, filed); colours and the email badge still go by name.
+1. **The org's stages are read through src/utils/stages.js** — `orgStages`, `firstStageOf`, `laneReader`, `commitStagesOf`, `quoteReader`, `reopenStage` — by the Pipeline tab, the deal window, Quotes, the deal import, Funnel stages and the two writes; Home reads `laneReader` too; Reports, the report engine and its prompt read stageOrder.js's order, which it stands on (Reports its lanes by `laneReader` — §18b144); the score reads `funnelStagesOf`; Settings' card and a new pipeline's copy, the stored list. Closed Won and Closed Lost are always of it, last, by those names. No open stage's name is written into code that decides on deals (the class scan, tests/stages.test.mjs — lists, comparisons and defaults; three files named: the app's own list twice, and the momentum alert, filed); colours and the email badge still go by name.
 2. **The Pipeline tab's board, funnel and stage filter draw every stage a deal there is in** (`stagesDrawn`; the board and funnel without Closed Lost): one off the list has a column, a row, an option — it is no drop target and no step between two others. The deal window's ribbon and Reports' funnels draw the org's alone.
 3. **A write names a stage of the org's, in the org's spelling** (`checkStages`, the deals endpoint's four writes; a backup's restore is not asked): refused otherwise, nothing written; a create naming none is made in the first; a blank on a save is not named; the one the deal has is never asked — but the org's own spelling named exactly is a move onto it. A bulk row the caller may not save, or that the org does not hold, refuses nothing: a refusal never tells of a deal they cannot read.
 4. **A stages save is the whole list, judged as the deals hold it**: exact names. A rename drops the name its deals hold, so a stage with any deal in it — a closed one too, there is no other to count in — is neither dropped nor renamed. A name the stored list holds, exactly and as often as it holds it, is never asked again for its length, a twin or reading as closed; a blank name, every weight (a whole 0–100), the two closes and an open stage are asked of every save.

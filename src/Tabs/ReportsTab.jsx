@@ -14,7 +14,8 @@ import { escapeHtml as esc, taskDay, linkedToAccount, linkedToContact, contactTo
 import { productsListOf, contactNamesText } from '../utils/oppText';
 import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openPipelineByRep, closeDayOf, cycleDaysOf, medianOf, closeDayInRange, lastQuarters } from '../utils/pipelineReport';
 import { probabilityText, countedProbability } from '../utils/dealProbability.js';
-import { openStagesOf, stagePalette, commitFallbackStages, bestCaseFallbackStages } from '../utils/stageOrder';
+import { openStagesOf, stagePalette } from '../utils/stageOrder';
+import { laneReader, categoryLabel } from '../utils/stages.js';
 import { repDeals } from '../utils/repDeals';
 import { isDispatcher, NON_REP_ROLES } from '../utils/roles.js';
 import TimeDropdown from '../components/ui/TimeDropdown';
@@ -515,10 +516,11 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             // lists named stages no deal can be in and omitted real ones (0.68 item 5).
                             const openStageOrder = openStagesOf(settings);
                             // Commit = won + deals the rep marked commit (with no forecast category, the last two stages count)
-                            const commitOpps  = openOpps.filter(o=> o.forecastCategory === 'commit' || (!o.forecastCategory && commitFallbackStages(openStageOrder).includes(o.stage)));
-                            // Best case = commit + deals marked best_case (falls back to Proposal stage)
-                            const bestCaseOpps= openOpps.filter(o=> o.forecastCategory === 'best_case' || (!o.forecastCategory && bestCaseFallbackStages(openStageOrder).includes(o.stage)));
-                            // Omitted deals are excluded from all calculations
+                            const laneOf      = laneReader(settings);   // the Pipeline tab's rule (state §0.301)
+                            const commitOpps  = openOpps.filter(o=> laneOf(o) === 'commit');
+                            // Best case = commit + deals marked best case (with no forecast category, the stage before those)
+                            const bestCaseOpps= openOpps.filter(o=> laneOf(o) === 'best');
+                            // Omitted deals are in neither
                             const commitVal   = wonOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0) + commitOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                             const bestCaseVal = commitVal + bestCaseOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                             const attainPct   = quota > 0 ? Math.round((totalWonRevenue / quota) * 100) : 0;
@@ -913,6 +915,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             // Per-rep data
                             const repNames = [...visibleRepNames2].sort();
                             const maxWidth = 1.2;
+                            const laneOf = laneReader(settings);
                             const repRows = repNames.map(rep=>{
                               const rUser = quotaUsers.find(u=>u.name===rep);
                               const quota = rUser ? getUserQuota(rUser) : 0;
@@ -920,7 +923,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                               const rLost = lostOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
                               const rOpen = openOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
                               const closed = rWon.reduce((s,o)=>s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0),0);
-                              const commit = rOpen.filter(o=> o.forecastCategory === 'commit' || (!o.forecastCategory && commitFallbackStages(openStagesOf(settings)).includes(o.stage))).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                              const commit = rOpen.filter(o=> laneOf(o) === 'commit').reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                               const attain = quota>0?closed/quota:0;
                               const commitPct = quota>0?commit/quota:0;
                               const winRate2 = (rWon.length+rLost.length)>0?rWon.length/(rWon.length+rLost.length):0;
@@ -2946,10 +2949,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const now7 = new Date(); now7.setDate(now7.getDate()-7);
         const iso7 = isoLocal(now7);
 
-        const commitOpps = allOpen.filter(o =>
-            o.forecastCategory === 'commit' ||
-            (!o.forecastCategory && commitFallbackStages(openStagesOf(settings)).includes(o.stage))
-        );
+        const laneOf = laneReader(settings);
+        const commitOpps = allOpen.filter(o => laneOf(o) === 'commit');
         const atRiskOpps = allOpen.filter(o => {
             const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
             const days = lastAct?.date ? daysSince(lastAct.date) : 999;
@@ -3005,7 +3006,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 <div style={{ display:'grid', gridTemplateColumns:'1.35fr 1fr', gap:14 }}>
                     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
                         <PanelD padding="18px 20px 14px">
-                            <SecHdrD title="Commits" subtitle={`${commitOpps.length} deal${commitOpps.length!==1?'s':''} · forecast category set to commit`} right={<span style={{ fontSize:12, color:T.inkMid, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(commitTotal)}</span>}/>
+                            <SecHdrD title="Commits" subtitle={`${commitOpps.length} deal${commitOpps.length!==1?'s':''} · marked commit, or with no forecast category in the last two stages`} right={<span style={{ fontSize:12, color:T.inkMid, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(commitTotal)}</span>}/>
                             {commitOpps.length === 0
                                 ? <div style={{ padding:'16px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No deals marked as commit. Set Forecast Category on an opportunity to see them here.</div>
                                 : commitOpps.map((o,i) => (
@@ -5892,7 +5893,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
   <div class="kpi-tile"><div class="kpi-label">Stage</div><div class="kpi-val">${esc(opp.stage||'—')}</div></div>
   <div class="kpi-tile"><div class="kpi-label">Probability</div><div class="kpi-val">${probabilityText(countedProbability(opp, settings?.funnelStages))}</div></div>
   <div class="kpi-tile"><div class="kpi-label">Close date</div><div class="kpi-val">${closeDate}</div></div>
-  <div class="kpi-tile"><div class="kpi-label">Forecast</div><div class="kpi-val">${esc(opp.forecastCategory||'—')}</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Forecast</div><div class="kpi-val">${esc(categoryLabel(opp)||'—')}</div></div>
 </div>
 <table><thead><tr><th>Date</th><th>Type</th><th>Event</th><th>Detail</th><th>Rep</th></tr></thead><tbody>${rowsHtml}</tbody></table>
 <div class="footer"><span>Accelerep · Confidential</span><span>Generated ${printDate}</span></div>
@@ -6390,7 +6391,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                     {stage}
                                                 </span>
                                                 <span style={{ fontSize:11.5, color:T.inkMid }}>
-                                                    Forecast: <b style={{ color:T.ink, textTransform:'capitalize' }}>{selectedOpp.forecastCategory || '—'}</b>
+                                                    Forecast: <b style={{ color:T.ink, textTransform:'capitalize' }}>{categoryLabel(selectedOpp) || '—'}</b>
                                                 </span>
                                             </div>
                                             <div style={{ padding:22 }}>

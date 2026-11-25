@@ -36,6 +36,7 @@
 
 import { isoLocal } from './dateLocal.js';
 import { probabilityOf, probabilityOfCell } from './dealProbability.js';
+import { categoryOf, categoryToStore } from './stages.js';
 
 const str = (v, max = 500) => (typeof v === 'string' ? v : v == null ? '' : String(v)).trim().slice(0, max);
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
@@ -269,7 +270,7 @@ export const UPDATABLE_OPPORTUNITY_FIELDS = Object.freeze({
 // name a column the engine refuses (the first update_field rule saved on dev
 // carried params {} — a typed field, or none, and nothing was written).
 export const UPDATABLE_FIELD_OPTIONS = Object.freeze([
-    Object.freeze({ key: 'forecastCategory', label: 'Forecast category' }),
+    Object.freeze({ key: 'forecastCategory', label: 'Forecast category (commit, best case, pipeline, omit)' }),
     Object.freeze({ key: 'probability',      label: 'Probability (a whole number, 0–100)' }),
     Object.freeze({ key: 'nextSteps',        label: 'Next steps' }),
     Object.freeze({ key: 'vertical',         label: 'Vertical' }),
@@ -294,9 +295,17 @@ export function updateFieldPatch(params) {
         if (value == null) return { ok: false, reason: `${field} must be a whole number from 0 to 100` };
         return { ok: true, field, value };
     }
+    if (field === 'forecastCategory') {
+        const { value } = categoryToStore(p.value);   // one of the four, as the deal window stores it (state §0.301): any word at all was stored, and counted as Pipeline
+        return value === undefined ? { ok: false, reason: `${field} must be commit, best case, pipeline or omit` } : { ok: true, field, value };
+    }
     const value = str(p.value, 500);
     return { ok: true, field, value: value || null };
 }
+
+// What a condition compares for a field: a forecast category in any of its spellings is one (state §0.301) — a rule that sets
+// 'Best Case' stores best_case, and one that asks for 'Best Case' means it.
+export const conditionText = (field, v) => (field === 'forecast_category' ? categoryOf({ forecastCategory: v }) ?? v : v);
 
 // ── The task action's assignee (state §0.126) ────────────────────────────────
 // The panel picks the assignee from the org's roster and stores BOTH the

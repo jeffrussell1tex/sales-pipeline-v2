@@ -5,7 +5,7 @@ import { useAuth } from '@clerk/clerk-react';
 import { quarterOf, quarterStartDate, quarterEndDate, fiscalStartOf } from '../utils/quarters';
 import { isoLocal, daysSince } from '../utils/dateLocal';
 import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
-import { openStagesOf, commitFallbackStages } from '../utils/stageOrder';
+import { laneReader } from '../utils/stages.js';
 import { isAddressedTo, isReadBy, sortNotes, audienceLabel } from '../utils/coachingNotes';
 import { T } from '../tokens.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
@@ -395,7 +395,7 @@ export default function HomeTab() {
     // quarter's own figure (userQuotaFor — the Sales Manager and Reports rule),
     // closed = won by close day inside the quarter (closeDayInRange, §0.75), and
     // commit = open deals forecast to close this quarter that are called commit
-    // or sit in the org's last two open stages (the Reports rule, §0.74) — not
+    // or, with no forecast category, sit in the org's last two open stages (laneReader, §0.301) — not
     // the typed list 'Negotiation','Closing',… which named stages no deal is in.
     //
     // Fiscal quarter window, not the calendar one. With an October fiscal start the
@@ -414,11 +414,11 @@ export default function HomeTab() {
     // Always scoped to current user — canSeeAll Admins/Managers still see their own home
     const myOpps         = visibleOpportunities.filter(o => !o.salesRep || o.salesRep === currentUser);
     const myClosedWonARR = myOpps.filter(o => o.stage === 'Closed Won' && closeDayInRange(o, quarterStart, quarterEnd)).reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
-    const commitStages   = commitFallbackStages(openStagesOf(settings));
+    const laneOf         = laneReader(settings);
     const myCommitARR    = myOpps.filter(o => {
         if (['Closed Won','Closed Lost'].includes(o.stage)) return false;
         const cd = o.forecastedCloseDate || o.closeDate || '';
-        return (o.forecastCategory === 'commit' || (!o.forecastCategory && commitStages.includes(o.stage))) && cd >= quarterStart && cd <= quarterEnd;
+        return laneOf(o) === 'commit' && cd >= quarterStart && cd <= quarterEnd;
     }).reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
 
     // The quarter's name the way the Sales Manager header and every report say

@@ -28,6 +28,7 @@
 //   - resolveField() accepts a saved report's dims/metrics by id OR by label,
 //     so a report saved before §0.133 (its ids were made from labels) opens.
 import { dayOf, inRange, periodRange } from './reportPeriod.js';
+import { categoryLabel } from './stages.js';
 import { closeDayOf, cycleDaysOf, medianOf } from './pipelineReport.js';
 import { activityRepOf } from './reportScope.js';
 import { lossBucketOf } from './lossAnalysis.js';
@@ -77,7 +78,7 @@ const OPP_DIMS = [
     D('close_date',         'Close date',         'month', (o) => monthOf(CLOSED_STAGES.includes(o.stage) ? closeDayOf(o) : o.forecastedCloseDate) || NONE),
     D('industry',           'Industry',           'text',  (o) => str(o.vertical) || NONE),
     D('territory',          'Territory',          'text',  (o) => str(o.territory) || NONE),
-    D('forecast_category',  'Forecast category',  'text',  (o) => str(o.forecastCategory) || NONE, true),
+    D('forecast_category',  'Forecast category',  'text',  (o) => categoryLabel(o) || NONE, true),
     D('loss_reason',        'Loss reason',        'text',  (o) => (o.stage === 'Closed Lost' ? lossBucketOf(o, 'Unspecified') : 'Not lost'), true),
     D('created_date',       'Created date',       'month', (o) => monthOf(o.createdDate || o.createdAt) || NONE, true),
     D('last_activity_date', 'Last activity date', 'month', (o, ctx) => { const last = ctx.lastActivityByOpp.get(o.id); return last ? monthOf(last) : 'No activity'; }, true),
@@ -168,10 +169,12 @@ const F = (id, label, kind, ops, test, extra = {}) => Object.freeze({ id, label,
 const numVal = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
 const cmp = (op, actual, wanted) => (actual == null ? false : op === 'lte' ? actual <= wanted : actual >= wanted);
 const eqText = (a, b) => str(a).toLowerCase() === str(b).toLowerCase();
+// A forecast category in any of its spellings — a saved report's 'best_case' is the dimension's 'Best Case' (state §0.301).
+const wantedOf = (dim, v) => (dim.id === 'forecast_category' ? categoryLabel({ forecastCategory: v }) ?? v : v);
 const textTest = (dim) => (row, ctx, op, value) => {
     const actual = dim.valueOf(row, ctx);
-    if (op === 'in') return (Array.isArray(value) ? value : [value]).some(v => eqText(actual, v));
-    const same = eqText(actual, value);
+    if (op === 'in') return (Array.isArray(value) ? value : [value]).some(v => eqText(actual, wantedOf(dim, v)));
+    const same = eqText(actual, wantedOf(dim, value));
     return op === 'ne' ? !same : same;
 };
 /**

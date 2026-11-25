@@ -14,7 +14,7 @@ import {
     AUTOMATION_TRIGGERS, TRIGGER_GROUPS, TRIGGER_VALUES, HOURLY_TRIGGERS, triggerOf, isAutomationTrigger,
     EVENT_FIELDS, conditionFields, dealEventData, leadEventData, taskEventData, renderMerge, eventSubject,
     taskFromAction, TASK_PRIORITIES, UPDATABLE_OPPORTUNITY_FIELDS, UPDATABLE_FIELD_OPTIONS, updateFieldPatch,
-    dealIdOfEvent,
+    dealIdOfEvent, conditionText,
 } from '../src/utils/automationEvents.js';
 import { assigneeOptions, assigneeParams, automationSlackMessage } from '../src/utils/automationEvents.js';
 import { isoLocal } from '../src/utils/dateLocal.js';
@@ -144,7 +144,15 @@ test('taskFromAction: defaults and guards — title from the deal, today for 0, 
 
 test('updateFieldPatch: an allowlist (18b34) — never orgId, ownerId, stage or the rep; probability is a whole 0–100; a blank string clears', () => {
     assert.deepEqual(Object.keys(UPDATABLE_OPPORTUNITY_FIELDS).sort(), ['forecastCategory', 'nextSteps', 'probability', 'team', 'territory', 'vertical']);
-    assert.deepEqual(updateFieldPatch({ entity: 'opportunity', field: 'forecastCategory', value: ' Commit ' }), { ok: true, field: 'forecastCategory', value: 'Commit' });
+    assert.deepEqual(updateFieldPatch({ entity: 'opportunity', field: 'forecastCategory', value: ' Commit ' }), { ok: true, field: 'forecastCategory', value: 'commit' });
+    for (const [typed, value] of [['Best Case', 'best_case'], ['best_case', 'best_case'], ['PIPELINE', 'pipeline'], ['omit', 'omit'], ['', null], ['  ', null], [null, null], [undefined, null]]) assert.deepEqual(updateFieldPatch({ field: 'forecastCategory', value: typed }), { ok: true, field: 'forecastCategory', value }, `one of the four, or none: ${typed}`);
+    for (const bad of ['At risk', 'committed', 'best', 7, 0, true, {}, ['commit']]) assert.deepEqual(updateFieldPatch({ field: 'forecastCategory', value: bad }), { ok: false, reason: 'forecastCategory must be commit, best case, pipeline or omit' }, `REGRESSION: any word was stored (${JSON.stringify(bad)})`);
+    assert.equal(UPDATABLE_FIELD_OPTIONS.find((f) => f.key === 'forecastCategory').label, 'Forecast category (commit, best case, pipeline, omit)', 'the panel says which');
+    // A condition asks for one in any of its spellings; every other field as it is.
+    for (const v of ['Best Case', 'best case', 'best_case', ' BEST-CASE ']) assert.equal(conditionText('forecast_category', v), 'best_case', v);
+    assert.deepEqual([conditionText('forecast_category', null), conditionText('forecast_category', undefined), conditionText('forecast_category', 'At risk'), conditionText('stage', 'Best Case'), conditionText('arr', 5)], [null, undefined, 'at_risk', 'Best Case', 5]);
+    const engine = code(read('netlify/functions/dispatch-automations.mjs'));
+    assert.ok(engine.includes('    const raw = conditionText(cond.field, data[cond.field]);\n    const val = conditionText(cond.field, cond.value);\n'));
     assert.deepEqual(updateFieldPatch({ entity: 'opportunity', field: 'nextSteps', value: '' }), { ok: true, field: 'nextSteps', value: null });
     assert.deepEqual(updateFieldPatch({ entity: 'opportunity', field: 'probability', value: '75' }), { ok: true, field: 'probability', value: 75 });
     assert.equal(updateFieldPatch({ entity: 'opportunity', field: 'probability', value: '75.4' }).ok, false, 'a fraction is refused, as its words say — never rounded (§0.300)');
@@ -377,7 +385,7 @@ test('the run history names the record a run was triggered by, from the lists th
 
 test('the Update field action saves what it shows — a select over the allowlist, defaults stored on type switch, no field refused at Create (Jeff, 13 Sep: "it did not change it to commit")', () => {
     assert.deepEqual(UPDATABLE_FIELD_OPTIONS.map(f => f.key), Object.keys(UPDATABLE_OPPORTUNITY_FIELDS), 'the picker IS the allowlist');
-    assert.deepEqual(updateFieldPatch({ field: 'forecastCategory', value: 'Commit' }), { ok: true, field: 'forecastCategory', value: 'Commit' }, 'a rule saved without an entity means opportunity');
+    assert.deepEqual(updateFieldPatch({ field: 'forecastCategory', value: 'Commit' }), { ok: true, field: 'forecastCategory', value: 'commit' }, 'a rule saved without an entity means opportunity');
     assert.equal(updateFieldPatch({ entity: 'opportunity' }).ok, false, 'but no field is still refused');
     const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
     assert.ok(s.includes('UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf, assigneeOptions, assigneeParams }'));

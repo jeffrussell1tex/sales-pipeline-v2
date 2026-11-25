@@ -166,14 +166,14 @@ test('showCoachingNote takes a { recipientIds } preset and the dialog pre-ticks 
 test('Home: the quota is the quarter\'s own figure and closed is won by close day inside it — not annual ÷ 4 against every win ever', () => {
     const home = read('src/Tabs/HomeTab.jsx');
     assert.ok(home.includes("import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';"));
-    assert.ok(home.includes("import { openStagesOf, commitFallbackStages } from '../utils/stageOrder';"));
+    assert.ok(home.includes("import { laneReader } from '../utils/stages.js';"));
     assert.ok(home.includes('const quarterlyQuota = userQuotaFor(myUserObj, `Q${quarter}`, todayQk?.fiscalYear);'), 'this quarter of THIS fiscal year\'s plan (state §0.203)');
     assert.ok(home.includes('    const myUserObj      = myProfileHere;'), 'the member\'s own row for this org — a rep\'s member list is names only, so the card read $0');
     assert.doesNotMatch(home, /myAnnualQuota\s*\/\s*4/, 'annual ÷ 4 (a quarterly plan read $0)');
     assert.ok(home.includes("o.stage === 'Closed Won' && closeDayInRange(o, quarterStart, quarterEnd)"));
     assert.doesNotMatch(home, /\['Negotiation','Closing'/, 'a typed stage list naming stages no deal is in');
-    assert.ok(home.includes('const commitStages   = commitFallbackStages(openStagesOf(settings));'));
-    assert.ok(home.includes("o.forecastCategory === 'commit' || (!o.forecastCategory && commitStages.includes(o.stage))"));
+    assert.ok(home.includes('const laneOf         = laneReader(settings);'));
+    assert.ok(home.includes("return laneOf(o) === 'commit' && cd >= quarterStart && cd <= quarterEnd;"), 'its own category, else its stage (state §0.301)');
     assert.ok(home.includes('const quarterStart = ') && home.indexOf('const quarterStart = ') < home.indexOf('const quarterlyQuota'), 'the window is computed before the figures that use it');
     assert.equal((home.match(/const quarterStart = /g) || []).length, 1, 'one window, not two');
     assert.ok(home.includes('const qLabel = todayQk ? `Q${todayQk.q} FY${todayQk.fiscalYear}` : `Q${quarter}`;'), 'the card is labelled with the quarter it measures');

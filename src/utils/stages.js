@@ -65,13 +65,48 @@ export function decideStages(rows, list, { priors = null, create = false, mayAsk
     }) };
 }
 
-// Where an open deal stands in the Pipeline tab's lanes, by its stage alone: the last two open stages are commit, the one
-// before them best case, every other stage — one off the list too — pipeline. (stage) => lane. Home and Reports read a deal's
-// own forecast category first (OPEN_ITEMS §4.2).
+// The four forecast categories a deal may be given, and the lane each puts it in.
+export const FORECAST_CATEGORIES = Object.freeze([
+    { value: 'commit',    label: 'Commit',    lane: 'commit',   hint: 'High confidence — counts in commit',       words: 'Rep is confident this deal closes this period.' },
+    { value: 'best_case', label: 'Best Case', lane: 'best',     hint: 'Upside — possible but not certain',        words: 'Best Case — upside if everything goes right.' },
+    { value: 'pipeline',  label: 'Pipeline',  lane: 'pipeline', hint: 'Too early to call',                        words: 'Pipeline — tracking but not yet forecastable.' },
+    { value: 'omit',      label: 'Omit',      lane: 'omit',     hint: 'Left out of commit and best case',         words: 'Left out of commit and best case.' },
+]);
+// A category's text as it is read: in any case, spaces, hyphens and underscores one (a rule's was stored as typed, until
+// §0.301); none is null.
+const categoryKey = (v) => (typeof v === 'string' ? v.trim().toLowerCase().replace(/[\s_-]+/g, '_') : '') || null;
+// A deal's own, as it is read: one of the four, a word that is none of them, or null for none.
+export const categoryOf = (deal) => categoryKey(deal?.forecastCategory);
+const listed = (key) => FORECAST_CATEGORIES.find((c) => c.value === key);
+// What a screen calls it: the four by their names, any other word as stored; null for none.
+export const categoryLabel = (deal) => { const key = categoryOf(deal); return key ? listed(key)?.label ?? deal.forecastCategory.trim() : null; };
+// What a rule stores for the value it was given: { value }, none when blank; {} for a word that is none of the four.
+export const categoryToStore = (v) => {
+    if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) return { value: null };
+    const one = listed(categoryKey(v));
+    return one ? { value: one.value } : {};
+};
+
+// Where an open deal stands in the forecast — Home, the Pipeline tab, its List and Reports read this one rule (state §0.301;
+// Jeff, 25 Nov: "yes"): its own forecast category; with none, its stage — the last two open ones are commit, the one before
+// them best case, every other, one off the list too, pipeline. A category that is none of the four is pipeline; a closed deal
+// stands nowhere. (deal) => 'commit' | 'best' | 'pipeline' | 'omit' | null.
 export function laneReader(settings) {
     const open = openStagesOf(settings);
     const commit = new Set(commitFallbackStages(open)), best = new Set(bestCaseFallbackStages(open));
-    return (stage) => (commit.has(stage) ? 'commit' : best.has(stage) ? 'best' : 'pipeline');
+    return (deal) => {
+        if (!deal || CLOSED_STAGES.includes(deal.stage)) return null;
+        const own = categoryOf(deal);
+        if (own) return listed(own)?.lane ?? 'pipeline';
+        return commit.has(deal.stage) ? 'commit' : best.has(deal.stage) ? 'best' : 'pipeline';
+    };
+}
+// What the deal window says under the four: the one chosen, or where a deal with none counts.
+export function categoryWords(deal, settings) {
+    const own = categoryOf(deal);
+    if (own) return listed(own)?.words ?? `"${deal.forecastCategory.trim()}" is none of the four — counted as Pipeline.`;
+    const lane = laneReader(settings)(deal);
+    return lane ? `Not set — counted by its stage: ${FORECAST_CATEGORIES.find((c) => c.lane === lane).label}.` : 'Not set.';
 }
 export const commitStagesOf = (settings) => commitFallbackStages(openStagesOf(settings));
 

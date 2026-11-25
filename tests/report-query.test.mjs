@@ -92,6 +92,15 @@ test('runReport groups deals by owner and stage and computes every metric per gr
     assert.ok(none.rows.some(x => x.keys[0] === 'None'), 'a blank vertical groups as None');
 });
 
+test('the forecast category dimension says the four by name, and a filter asks for one in any of its spellings (§0.301)', () => {
+    const some = { ...data, opportunities: [['a', 'best_case'], ['b', 'Best Case'], ['c', 'commit'], ['d', null], ['e', 'At risk']].map(([id, forecastCategory]) => ({ ...opps[0], id, forecastCategory })) };
+    const of = (where) => runReport({ source: 'Opportunities', dims: ['forecast_category'], metrics: ['deals'], ...(where ? { where } : {}) }, some, { today: TODAY, fiscalStart: 1 });
+    assert.deepEqual(Object.fromEntries(of().rows.map((r) => [r.keys[0], r.values.deals])), { 'Best Case': 2, Commit: 1, None: 1, 'At risk': 1 });
+    const counts = (op, value) => of([{ id: 'forecast_category', op, value }]).count;
+    for (const v of ['best_case', 'Best Case', ' best case']) assert.deepEqual([counts('eq', v), counts('ne', v), counts('in', [v, 'COMMIT'])], [2, 3, 3], `REGRESSION: a saved report's ${v}`);
+    assert.deepEqual([counts('eq', 'None'), counts('eq', 'at risk'), counts('eq', 'omit')], [1, 1, 0]);
+});
+
 test('the advanced deal metrics: days to close is the median cycle of CLOSED deals, days in stage reads open deals only, AI score averages what exists, activities count the linked rows', () => {
     const r = run({ source: 'Opportunities', dims: [], metrics: ['days_to_close', 'days_in_stage', 'ai_score', 'activities'] });
     assert.equal(r.rows.length, 1, 'no dimension: one group');

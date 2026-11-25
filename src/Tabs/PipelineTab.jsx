@@ -475,8 +475,8 @@ export default function PipelineTab() {
         const d = calendarDays(todayLocal(), o.forecastedCloseDate);
         return d !== null && d >= -14 && d <= 7;
     });
-    const laneOf = laneReader(settings);   // the org's last two open stages are commit, the one before best case (state §0.299)
-    const commitOpps = visibleOpportunities.filter(o => laneOf(o.stage) === 'commit');
+    const laneOf = laneReader(settings);   // a deal's own forecast category, else its stage (state §0.301)
+    const commitOpps = visibleOpportunities.filter(o => laneOf(o) === 'commit');
     const recentlyTouched = visibleOpportunities.filter(o => {
         if (!o.stageChangedDate) return false;
         const n = daysSince(o.stageChangedDate);   // calendar days (§0.240); null would pass `<= 7`, as NaN never did
@@ -553,7 +553,7 @@ export default function PipelineTab() {
     }, [pipelineFilteredOpps, smartPreset]);
 
     const pipelineTotalARR   = pipelineFilteredOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
-    const commitARR          = pipelineFilteredOpps.filter(o => laneOf(o.stage) === 'commit').reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+    const commitARR          = pipelineFilteredOpps.filter(o => laneOf(o) === 'commit').reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
     // Weighted Revenue = sum of (arr * probability / 100) across open deals — one with none at its stage's default (state §0.300)
     const weightedARR        = pipelineFilteredOpps
         .filter(o => !['Closed Won','Closed Lost'].includes(o.stage))
@@ -911,9 +911,11 @@ export default function PipelineTab() {
                 {/* ── FORECAST VIEW ─────────────────────────────────── */}
                 {pipelineView === 'forecast' && (() => {
                     const open        = smartFilteredOpps.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
-                    const commitDeals = open.filter(o => laneOf(o.stage) === 'commit').sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
-                    const bestDeals   = open.filter(o => laneOf(o.stage) === 'best').sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
-                    const pipeDeals   = open.filter(o => laneOf(o.stage) === 'pipeline').sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));   // every other open deal: one in no stage of these lists was in no lane, and in the total
+                    const commitDeals = open.filter(o => laneOf(o) === 'commit').sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                    const bestDeals   = open.filter(o => laneOf(o) === 'best').sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                    const pipeDeals   = open.filter(o => laneOf(o) === 'pipeline').sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));   // every other open deal but the omitted: one in no stage of the org's list too
+                    const omitDeals   = open.filter(o => laneOf(o) === 'omit').sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));   // in the total too: drawn, never left off
+                    const bestStage   = bestCaseFallbackStages(openStagesOf(settings))[0];
                     const sumARR      = arr => arr.reduce((s,o) => s + (parseFloat(o.arr)||0), 0);
                     const forecastTotalARR = smartFilteredOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
 
@@ -931,7 +933,7 @@ export default function PipelineTab() {
                         <div style={{ paddingBottom: 20 }}>
                             <div style={{ marginBottom: 14 }}>
                                 <div style={{ fontFamily: T.serif, fontSize: 26, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 4 }}>Your quarter, at a glance.</div>
-                                <div style={{ fontSize: 12, color: T.inkMuted }}>Three lanes: what's committed, what's likely, what's coming.</div>
+                                <div style={{ fontSize: 12, color: T.inkMuted }}>What's committed, what's likely, what's coming.</div>
                             </div>
                             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 20, fontSize: 12, fontFamily: T.sans, marginBottom: 20 }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase' }}>This week</span>
@@ -942,8 +944,9 @@ export default function PipelineTab() {
                                 <div style={{ flex: 1 }}/>
                             </div>
                             <ForecastLane label="Commit"    subtitle={`${commitDeals.length} deal${commitDeals.length !== 1 ? 's' : ''} you're betting on`} opps={commitDeals} total={sumARR(commitDeals)} accent={T.ok} deps={cardCtx}/>
-                            <ForecastLane label="Best case" subtitle={`${bestDeals.length} in ${bestCaseFallbackStages(openStagesOf(settings))[0] || 'no stage'}`}                                               opps={bestDeals}   total={sumARR(bestDeals)}   accent={T.warn} deps={cardCtx}/>
-                            <ForecastLane label="Pipeline"  subtitle={`${pipeDeals.length} earlier stages`}                                                   opps={pipeDeals}   total={sumARR(pipeDeals)}   accent={T.info} deps={cardCtx}/>
+                            <ForecastLane label="Best case" subtitle={`${bestDeals.length} marked best case${bestStage ? ` or in ${bestStage}` : ''}`}                                               opps={bestDeals}   total={sumARR(bestDeals)}   accent={T.warn} deps={cardCtx}/>
+                            <ForecastLane label="Pipeline"  subtitle={`${pipeDeals.length} in neither`}                                                   opps={pipeDeals}   total={sumARR(pipeDeals)}   accent={T.info} deps={cardCtx}/>
+                            {omitDeals.length > 0 && <ForecastLane label="Omitted" subtitle={`${omitDeals.length} left out of commit and best case`} opps={omitDeals} total={sumARR(omitDeals)} accent={T.borderStrong} deps={cardCtx}/>}
                         </div>
                     );
                 })()}

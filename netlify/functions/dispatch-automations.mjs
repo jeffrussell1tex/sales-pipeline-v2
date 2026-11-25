@@ -28,15 +28,15 @@ import { sendEmail }   from './send-email.mjs';
 import { sendSlackToOrg, slackTemplates } from './send-slack.mjs';
 import { resolveOwnerId, rosterUserById } from './_lib.mjs';
 import {
-    isAutomationTrigger, renderMerge, taskFromAction, updateFieldPatch, eventSubject, triggerOf, dealIdOfEvent,
+    isAutomationTrigger, renderMerge, taskFromAction, updateFieldPatch, conditionText, eventSubject, triggerOf, dealIdOfEvent,
 } from '../../src/utils/automationEvents.js';
 
 // ── Condition evaluation ──────────────────────────────────────────────────────
 // Each condition: { field, operator, value }
 // Operators: eq | neq | contains | gt | lt | gte | lte | exists
 const evalCondition = (cond, data) => {
-    const raw = data[cond.field];
-    const val = cond.value;
+    const raw = conditionText(cond.field, data[cond.field]);
+    const val = conditionText(cond.field, cond.value);
     switch (cond.operator) {
         case 'eq':       return String(raw).toLowerCase() === String(val).toLowerCase();
         case 'neq':      return String(raw).toLowerCase() !== String(val).toLowerCase();

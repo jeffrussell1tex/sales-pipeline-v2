@@ -134,6 +134,7 @@ test('the deal window: an edit leaves out an untouched Account (and its Site Nam
         "            ...(pipelinePicked.current ? [] : ['pipelineId']),\n" +   // §0.297
         "            ...(stageTouched.current ? [] : ['stage']),\n" +   // §0.300
         "            ...(probTouched.current || stageWentOut.current ? [] : ['probability']),\n" +
+        "            ...(categoryTouched.current ? [] : ['forecastCategory']),\n" +   // §0.301
         "        ];\n"), "a new deal (a lead's convert has no id) leaves nothing out; a Site Name typed is sent though its Account is not — the endpoint's lift keeps a Site Name only when the account id is sent; an untouched close date (and its quarter) left out (state §0.239, Jeff's Q2)");
     // The close date the window opened with, taken once from the form as it opened — an undated deal opens on today.
     assert.ok(m.includes("    const closeSeed = useRef(formData.forecastedCloseDate ?? '').current;"));

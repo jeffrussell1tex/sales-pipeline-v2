@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import {
-    orgStages, firstStageOf, stagesDrawn, stageNamed, stageToStore, stageRefusal, laneReader, commitStagesOf, quoteReader, reopenStage,
+    orgStages, firstStageOf, stagesDrawn, stageNamed, stageToStore, stageRefusal, laneReader, categoryOf, categoryLabel, categoryWords, FORECAST_CATEGORIES, commitStagesOf, quoteReader, reopenStage,
     stagesRefused, stagesToStore, removedStages, stagesInUseWords, stageRowsOf, stagesSent, dealsByStage, movedRow, STAGE_MAX,
     decideStages, addedRow, editedRow, removedRow, dealsIn, nameLocked, removable, typedWeight,
 } from '../src/utils/stages.js';
@@ -21,6 +21,14 @@ const count = (s, x) => s.split(x).length - 1;
 const CLOSES = [{ name: 'Closed Won', weight: 100 }, { name: 'Closed Lost', weight: 0 }];
 const LIST = [{ name: 'Lead in', weight: 10 }, { name: 'Site visit', weight: 40 }, { name: 'Bid sent', weight: 70 }, { name: 'Verbal', weight: 90 }, ...CLOSES];
 const ORG = { funnelStages: LIST };
+// Where a deal's category and the stages it falls back to are named (state §0.301): the rule (stages.js, stageOrder.js); the
+// best-case stage in the Forecast view's words (PipelineTab); the commit stages in the List's words; the window's press, its
+// touched mark, what it leaves out and a new deal's none; an automation's payload, the field a rule may set and the value a
+// condition asks for; a report's filter; the public API's answer; the column.
+const CATEGORY_READS = {
+    'netlify/functions/opportunities.mjs': 2, 'netlify/functions/public-api.mjs': 1, 'src/Tabs/PipelineTab.jsx': 2, 'src/components/ListView.jsx': 2,
+    'src/components/modals/OpportunityModal.jsx': 4, 'src/utils/automationEvents.js': 5, 'src/utils/reportQuery.js': 1, 'src/utils/stageOrder.js': 2, 'src/utils/stages.js': 9,
+};
 const APP = ['Qualification', 'Discovery', 'Evaluation (Demo)', 'Proposal', 'Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'];
 
 test("the org's stages: the open ones in order, then the two closes, there whatever is stored; none stored, or junk, the app's own", () => {
@@ -80,11 +88,26 @@ test('the rows of a write: each decided, all or none — a create\'s blank the f
     assert.deepEqual(decideStages([null, 'x'], own, { priors }), { rows: [null, 'x'] });
 });
 
-test('the lanes: the last two open stages commit, the one before best case, every other — off the list too — pipeline; a deal in one lane always', () => {
-    const lane = laneReader(ORG);
-    assert.deepEqual(['Lead in', 'Site visit', 'Bid sent', 'Verbal', 'Old one', '', undefined].map(lane), ['pipeline', 'best', 'commit', 'commit', 'pipeline', 'pipeline', 'pipeline']);
-    const app = laneReader({});
-    assert.deepEqual(APP.slice(0, 6).map(app), ['pipeline', 'pipeline', 'pipeline', 'best', 'commit', 'commit'], 'the app\'s own list as before');
+test('the lanes: a deal\'s own forecast category; with none, its stage — the last two open ones commit, the one before best case, every other, off the list too, pipeline; an open deal in one lane always, a closed one in none', () => {
+    const lane = laneReader(ORG), at = (read) => (stage) => read({ stage });
+    assert.deepEqual(['Lead in', 'Site visit', 'Bid sent', 'Verbal', 'Old one', '', undefined].map(at(lane)), ['pipeline', 'best', 'commit', 'commit', 'pipeline', 'pipeline', 'pipeline']);
+    assert.deepEqual(APP.slice(0, 6).map(at(laneReader({}))), ['pipeline', 'pipeline', 'pipeline', 'best', 'commit', 'commit'], 'the app\'s own list as before');
+    // Its own category first, whatever its stage (Jeff, 25 Nov).
+    const own = (stage) => ['commit', 'best_case', 'pipeline', 'omit'].map((forecastCategory) => lane({ stage, forecastCategory }));
+    for (const stage of ['Lead in', 'Site visit', 'Verbal', 'Old one', undefined]) assert.deepEqual(own(stage), ['commit', 'best', 'pipeline', 'omit'], `REGRESSION: ${stage} counted by its stage`);
+    for (const none of [null, undefined, '', '   ', 7, {}, []]) assert.equal(lane({ stage: 'Verbal', forecastCategory: none }), 'commit', JSON.stringify(none));
+    for (const [typed, l] of [['Commit', 'commit'], [' BEST CASE ', 'best'], ['best-case', 'best'], ['Omit', 'omit'], ['Best  Case', 'best'], ['best_ case', 'best'], ['likely', 'pipeline'], ['constructor', 'pipeline'], ['bestcase', 'pipeline']]) assert.equal(lane({ stage: 'Verbal', forecastCategory: typed }), l, typed);
+    for (const stage of ['Closed Won', 'Closed Lost']) for (const forecastCategory of ['commit', 'best_case', 'omit', null]) assert.equal(lane({ stage, forecastCategory }), null, 'a closed deal is forecast no more');
+    for (const x of [null, undefined]) assert.equal(lane(x), null);
+    assert.deepEqual(['Commit', ' Best Case', 'omit', 'not a one', '', null, 5].map((forecastCategory) => categoryOf({ forecastCategory })), ['commit', 'best_case', 'omit', 'not_a_one', null, null, null]);
+    assert.deepEqual(['COMMIT', 'best_case', 'pipeline', 'omit', ' At risk ', '', null, 5].map((forecastCategory) => categoryLabel({ forecastCategory })), ['Commit', 'Best Case', 'Pipeline', 'Omit', 'At risk', null, null, null]);
+    assert.deepEqual(FORECAST_CATEGORIES.map((c) => [c.value, c.label, c.lane, c.hint]), [['commit', 'Commit', 'commit', 'High confidence — counts in commit'], ['best_case', 'Best Case', 'best', 'Upside — possible but not certain'], ['pipeline', 'Pipeline', 'pipeline', 'Too early to call'], ['omit', 'Omit', 'omit', 'Left out of commit and best case']], 'what the window stores is what the lanes read');
+    assert.equal(categoryOf(null), null);
+    // What the window says: the one chosen, or where one with none counts.
+    const said = (stage, forecastCategory) => categoryWords({ stage, forecastCategory }, ORG);
+    assert.deepEqual([said('Verbal'), said('Site visit', null), said('Lead in', ''), said('Closed Won')], ['Not set — counted by its stage: Commit.', 'Not set — counted by its stage: Best Case.', 'Not set — counted by its stage: Pipeline.', 'Not set.']);
+    assert.deepEqual([said('Lead in', 'commit'), said('Lead in', 'Best Case'), said('Verbal', 'pipeline'), said('Verbal', 'omit')], ['Rep is confident this deal closes this period.', 'Best Case — upside if everything goes right.', 'Pipeline — tracking but not yet forecastable.', 'Left out of commit and best case.']);
+    assert.deepEqual([said('Verbal', ' likely '), said('Verbal', 'constructor')], ['"likely" is none of the four — counted as Pipeline.', '"constructor" is none of the four — counted as Pipeline.']);
     assert.deepEqual(commitStagesOf(ORG), ['Bid sent', 'Verbal']);
     assert.deepEqual(commitStagesOf({}), ['Negotiation/Review', 'Contracts']);
     const quoted = (s) => [...orgStages(s), 'Old one'].filter(quoteReader(s));
@@ -220,17 +243,43 @@ test('THE GUARD: no screen draws, counts or makes a deal by a list of stages wri
         assert.equal(count(s, "const visibleStages = stagesDrawn(stages, pipelineFilteredOpps).filter(s => s !== 'Closed Lost');"), 1, `REGRESSION: the ${f} left off a deal in a stage of its org's`);
     }
     assert.equal(count(pipe, "stages={stagesDrawn(stages, [...visibleOpportunities, ...pipelineStageFilter.filter(s => s !== '__allOpen__').map(stage => ({ stage }))])}"), 1, 'the stage filter, and the stage it filters by');
-    for (const x of ["const open        = smartFilteredOpps.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));", "const commitDeals = open.filter(o => laneOf(o.stage) === 'commit')", "const bestDeals   = open.filter(o => laneOf(o.stage) === 'best')", "const pipeDeals   = open.filter(o => laneOf(o.stage) === 'pipeline')", "const commitOpps = visibleOpportunities.filter(o => laneOf(o.stage) === 'commit');", "pipelineFilteredOpps.filter(o => laneOf(o.stage) === 'commit')"]) assert.equal(count(pipe, x), 1, x);
+    for (const x of ["const open        = smartFilteredOpps.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));", "const commitDeals = open.filter(o => laneOf(o) === 'commit')", "const bestDeals   = open.filter(o => laneOf(o) === 'best')", "const pipeDeals   = open.filter(o => laneOf(o) === 'pipeline')", "const omitDeals   = open.filter(o => laneOf(o) === 'omit')", '{omitDeals.length > 0 && <ForecastLane label="Omitted" subtitle={`${omitDeals.length} left out of commit and best case`} opps={omitDeals} total={sumARR(omitDeals)}', "What's committed, what's likely, what's coming.", "const commitOpps = visibleOpportunities.filter(o => laneOf(o) === 'commit');", "pipelineFilteredOpps.filter(o => laneOf(o) === 'commit').reduce("]) assert.equal(count(pipe, x), 1, x);
     // A column for a stage off the org's list is drawn, never dropped on.
     assert.deepEqual([count(kanban, 'if (!stages.includes(stage)) return; e.preventDefault();'), count(kanban, 'if (stages.includes(stage)) handleKanbanDrop(stage);'), count(kanban, 'handleKanbanDrop(stage)')], [2, 2, 2]);
     assert.equal(count(pipe, 'const laneOf = laneReader(settings);'), 1);
-    assert.deepEqual(['commit', 'best', 'pipeline'].map((l) => count(pipe, `laneOf(o.stage) === '${l}'`)), [3, 1, 1]);
-    assert.ok(pipe.includes("{`${bestDeals.length} in ${bestCaseFallbackStages(openStagesOf(settings))[0] || 'no stage'}`}"));
+    assert.deepEqual(['commit', 'best', 'pipeline', 'omit'].map((l) => count(pipe, `laneOf(o) === '${l}'`)), [3, 1, 1, 1]);
+    assert.ok(pipe.includes("{`${bestDeals.length} marked best case${bestStage ? ` or in ${bestStage}` : ''}`}") && pipe.includes('const bestStage   = bestCaseFallbackStages(openStagesOf(settings))[0];') && pipe.includes('{`${pipeDeals.length} in neither`}'));
+    for (const [label, deals] of [['Commit', 'commitDeals'], ['Best case', 'bestDeals'], ['Pipeline', 'pipeDeals'], ['Omitted', 'omitDeals']]) assert.equal((pipe.match(new RegExp(`<ForecastLane label="${label}"\\s.*\\sopps=\\{${deals}\\}\\s+total=\\{sumARR\\(${deals}\\)\\}\\s+accent=\\{T\\.\\w+\\} deps=\\{cardCtx\\}/>`)) || []).length, 1, label);
+    // Run: the header's commit and the four lanes, over deals of every kind.
+    const deals = [['late', 'Verbal', null, 1, '2026-09-02'], ['soon', 'Verbal', null, 2, '2026-01-02'], ['left out', 'Verbal', 'omit', 4, '2026-05-01'], ['called', 'Lead in', 'Commit', 8, ''], ['won', 'Closed Won', 'commit', 16, ''], ['likely', 'Lead in', 'best_case', 32, '2026-03-01'], ['site', 'Site visit', null, 64, '2026-02-01'], ['early', 'Lead in', null, 128, '2026-02-02'], ['marked', 'Verbal', 'pipeline', 256, '2026-02-01'], ['left first', 'Lead in', 'omit', 512, '2026-04-01']].map(([id, stage, forecastCategory, arr, forecastedCloseDate]) => ({ id, stage, forecastCategory, arr: String(arr), forecastedCloseDate }));
+    const cut = (from, to) => { const i = pipe.indexOf(from); assert.ok(i >= 0 && pipe.indexOf(to, i) > i, from); return pipe.slice(i, pipe.indexOf(to, i)); };
+    const run = new Function('laneOf', 'pipelineFilteredOpps', 'smartFilteredOpps', 'bestCaseFallbackStages', 'openStagesOf', 'settings', cut('    const commitARR ', '    const weightedARR') + cut('                    const open        = ', '                    const weekStart ') + 'return { commitARR, lanes: [commitDeals, bestDeals, pipeDeals, omitDeals].map((l) => l.map((d) => d.id)), sums: [commitDeals, bestDeals, pipeDeals, omitDeals].map(sumARR), forecastTotalARR, bestStage };');
+    assert.deepEqual(run(laneReader(ORG), deals, deals, (l) => l.slice(-3, -2), () => ['Lead in', 'Site visit', 'Bid sent', 'Verbal'], ORG), { commitARR: 11, lanes: [['soon', 'late', 'called'], ['site', 'likely'], ['marked', 'early'], ['left first', 'left out']], sums: [11, 96, 384, 516], forecastTotalARR: 1023, bestStage: 'Site visit' });
     assert.equal(count(list, 'const commitStages = commitStagesOf(settings);'), 1);
-    assert.equal(count(list, 'const commit   = opps.filter(o => commitStages.includes(o.stage))'), 1);
-    assert.deepEqual([count(list, 'qSummary(g.opps, commitStages, '), count(list, 'qSummary(activeGroup.opps, commitStages, '), count(list, 'commitStages={commitStages}'), count(list, "sub: commitStages.join(' + '),")], [1, 1, 2, 1]);
+    assert.equal(count(list, "const commit   = opps.filter(o => laneOf(o) === 'commit')"), 1);
+    assert.deepEqual([count(list, 'qSummary(g.opps, laneOf, '), count(list, 'qSummary(activeGroup.opps, laneOf, '), count(list, 'const laneOf = laneReader(settings);'), count(list, 'laneOf={laneOf}'), count(list, 'commitStages={commitStages}'), count(list, "{ label: 'Commit',    value: fmtMoney(sum.commit),   sub: `marked commit, else in ${commitStages.join(' or ')}`,")], [1, 1, 1, 1, 1, 1]);
+    // Home and Reports read the same one (state §0.301).
+    const home = code('src/Tabs/HomeTab.jsx'), rep = code('src/Tabs/ReportsTab.jsx');
+    assert.deepEqual([count(home, 'const laneOf         = laneReader(settings);'), count(home, "return laneOf(o) === 'commit' && cd >= quarterStart && cd <= quarterEnd;")], [1, 1]);
+    assert.deepEqual([count(rep, 'laneReader(settings);'), count(rep, "openOpps.filter(o=> laneOf(o) === 'commit')"), count(rep, "openOpps.filter(o=> laneOf(o) === 'best')"), count(rep, "rOpen.filter(o=> laneOf(o) === 'commit').reduce((s,o)=>s+(parseFloat(o.arr)||0),0);"), count(rep, "allOpen.filter(o => laneOf(o) === 'commit')")], [3, 1, 1, 1, 1]);
+    const held = deals.filter((d) => d.stage !== 'Closed Won'), won = deals.filter((d) => d.stage === 'Closed Won');
+    const slice = (from, to) => { const i = rep.indexOf(from); assert.ok(i >= 0 && rep.indexOf(to, i) > i, from); return rep.slice(i, rep.indexOf(to, i)); };
+    assert.deepEqual(new Function('laneReader', 'settings', 'openOpps', 'wonOpps', slice('                            const laneOf      = ', '                            const attainPct ') + 'return [commitVal, bestCaseVal];')(laneReader, ORG, held, won), [27, 123], 'the period\'s commit and best case, run');
+    assert.deepEqual(new Function('laneReader', 'settings', 'allOpen', slice('        const laneOf = laneReader(settings);\n        const commitOpps', '        const atRiskOpps') + slice('        const commitTotal = ', '        const riskTotal') + 'return commitTotal;')(laneReader, ORG, held), 11, 'the deal review\'s, run');
+    assert.deepEqual([count(rep, ": commitOpps.map((o,i) => ("), count(rep, 'value={fmtShort(commitTotal)}'), count(rep, "{ label:'Commit',        value:commitVal, ")], [1, 1, 1]);
+    assert.deepEqual([count(rep, "${esc(categoryLabel(opp)||'—')}"), count(rep, "{categoryLabel(selectedOpp) || '—'}"), count(rep, '· marked commit, or with no forecast category in the last two stages`}'), count(code('src/utils/reportQuery.js'), '(o) => categoryLabel(o) || NONE, true)')], [1, 1, 1, 1]);
+    assert.equal(count(code('src/Tabs/settings/salesProcess/FunnelStagesDetail.jsx'), "A deal's own forecast category says whether it is commit or best case; with none set, the last two open stages are commit and the one before them best case."), 1);
     const modal = code('src/components/modals/OpportunityModal.jsx');
     assert.equal(count(modal, 'const stages = orgStages(settings);'), 1);
+    // The window shows the category the deal has, none when it has none, and takes it off again.
+    for (const x of ['const sel = categoryOf(formData) === value;', "onClick={() => handleChange('forecastCategory', sel ? null : value)}", '{categoryWords(formData, settings)}', '{FORECAST_CATEGORIES.map(({ value, label, hint }) => {', 'const { bg, fg, bd } = CATEGORY_TONES[value];', 'title={sel ? `${hint} · press again for none` : hint}', 'probability: null, forecastCategory: null, arr: 0,', 'const categoryTouched = useRef(false);', "        if (field === 'forecastCategory') categoryTouched.current = true;\n        if (field === 'stage') {\n", '                                                        {label}\n                                                    </button>', 'border: `1.5px solid ${sel ? bd : T.border}`,', 'background: sel ? bg : T.surface,\n                                                            color: sel ? fg : T.inkMuted,', '>drives commit and best case</span>', '                                            {categoryWords(formData, settings)}\n                                        </div>', "...(categoryTouched.current ? [] : ['forecastCategory']),"]) assert.equal(count(modal, x), 1, x);
+    for (const c of FORECAST_CATEGORIES) assert.equal((modal.match(new RegExp(`^    ${c.value}:\\s+\\{ bg: [^,]+(?:,[^,]+)*?, +fg: T\\.\\w+, +bd: \\S.* \\},$`, 'gm')) || []).length, 1, `a colour for ${c.value}`);
+    // THE GUARD: no screen decides on a deal's category, or on the stages it falls back to, itself.
+    const walk = (dir) => readdirSync(new URL('../' + dir, import.meta.url), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(dir + e.name + '/') : /\.jsx?$/.test(e.name) ? [dir + e.name] : []));
+    // Every file that names one, with how many times it does: a new read of either is a decision to look at.
+    const NAMES = /forecastCategory|commitFallbackStages|bestCaseFallbackStages|commitStagesOf/g;
+    const named = Object.fromEntries([...walk('src/'), ...readdirSync(new URL('../netlify/functions/', import.meta.url)).filter((f) => f.endsWith('.mjs')).map((f) => 'netlify/functions/' + f)].map((f) => [f, (code(f).match(NAMES) || []).length]).filter(([, n]) => n));
+    assert.deepEqual(named, CATEGORY_READS);
     for (const x of ["painPoints: '', contacts: '', stage: firstStageOf(settings),", '            stage:           base.stage ?? firstStageOf(settings),', 'const allStages = stages;', 'const target = reopenStage(stages, { left: prevOpenStageRef.current, held: opportunity?.stage, history: opportunity?.stageHistory });', 'if (!isClosed) { prevOpenStageRef.current = formData.stage || null; prevProbRef.current = formData.probability; }']) assert.equal(count(modal, x), 1, x);
     const quotes = code('src/Tabs/QuotesTab.jsx');
     assert.ok(quotes.includes('const toQuote = useMemo(() => quoteReader(settings), [settings?.funnelStages]);') && quotes.includes('.filter(o => toQuote(o.stage) && !quotedOppIds.has(o.id))') && quotes.includes('[opportunities, quotedOppIds, toQuote]);'));

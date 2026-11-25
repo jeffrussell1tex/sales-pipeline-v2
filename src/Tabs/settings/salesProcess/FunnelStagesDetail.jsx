@@ -90,7 +90,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                 <div>
                     <CSectionCard
                         title="Deal stages"
-                        description="The stages a deal moves through, in order. The last two open stages are the Pipeline tab's commit, and the one before them its best case; on Home and in Reports a deal's own forecast category comes first. A stage with deals in it keeps its name — move them first to rename or remove it. History, automations, saved views and reports that name a stage you rename or remove keep its old name."
+                        description="The stages a deal moves through, in order. A deal's own forecast category says whether it is commit or best case; with none set, the last two open stages are commit and the one before them best case. A stage with deals in it keeps its name — move them first to rename or remove it. History, automations, saved views and reports that name a stage you rename or remove keep its old name."
                         headAction={<button onClick={addStage} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ Add stage</button>}
                     >
                         <SPTable
