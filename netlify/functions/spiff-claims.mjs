@@ -2,6 +2,8 @@ import { db } from '../../db/index.js';
 import { spiffClaims, opportunities } from '../../db/schema.js';
 import { eq, and, ne, desc, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
+import { readableDealIds } from './_dealAccess.mjs';
+import { canSeeAll, crmReadScope } from '../../src/utils/roles.js';
 import { serverErrorBody, auditAs, resolveCaller } from './_lib.mjs';
 import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 import { claimRefused, rowLock } from './_lib.mjs';   // a batch its claim aborted (22012); the row it holds meanwhile (§0.295)
@@ -36,9 +38,20 @@ const pairFree = (orgId, { id, opportunityId, spiffId }) => (blankText(opportuni
     rowLock(opportunities, opportunityId, orgId),
     db.execute(sql`select 1 / (case when exists (select 1 from ${spiffClaims} where ${pairOf(orgId, opportunityId, spiffId, id)}) then 0 else 1 end)`),
 ]);
-// …and the refusal: the claim that holds it handed back, so the screen that lacked it has it.
-const alreadyClaimed = async (orgId, { id, opportunityId, spiffId }) => {
-    const [held] = await db.select().from(spiffClaims).where(pairOf(orgId, opportunityId, spiffId, id)).limit(1);
+// The claims a caller may read (state §0.298): every one for an Admin or a Manager; for anyone else their own, by name, and
+// those on a deal they may read — a claim is its deal's (guide §18b48), and what it says is another member's pay. Every
+// claim of the org, its amount and its rep, was handed to every role, a technician's too. A role that reads none of the CRM
+// reads none.
+const claimsSeen = async (auth, rows) => {
+    if (canSeeAll(auth.userRole)) return rows;
+    if (!rows.length || crmReadScope(auth.userRole) === 'none') return [];
+    const { name: me } = await resolveCaller(auth.userId, auth.orgId);   // decided on: a failed read throws (state §0.292)
+    const deals = await readableDealIds(auth, rows.map((c) => c.opportunityId));
+    return rows.filter((c) => sameName(c.repName, me) || deals.has(c.opportunityId));
+};
+// …and the refusal: the claim that holds it handed back where the caller may read it, so the screen that lacked it has it.
+const alreadyClaimed = async (auth, { id, opportunityId, spiffId }) => {
+    const [held] = await claimsSeen(auth, await db.select().from(spiffClaims).where(pairOf(auth.orgId, opportunityId, spiffId, id)).limit(1));
     return { statusCode: 409, headers, body: JSON.stringify({ error: 'This SPIFF is already claimed for this deal.', code: 'claimed', ...(held ? { spiffClaim: held } : {}) }) };
 };
 
@@ -88,13 +101,13 @@ export const handler = async (event) => {
     if (forbidden) return forbidden;
 
     try {
-        // ── GET: fetch all claims for this org ────────────────────────────────
+        // ── GET: the claims of this org the caller may read ───────────────────
         if (event.httpMethod === 'GET') {
             const rows = await db.select()
                 .from(spiffClaims)
                 .where(eq(spiffClaims.orgId, orgId))
                 .orderBy(desc(spiffClaims.claimedAt));
-            return { statusCode: 200, headers, body: JSON.stringify({ spiffClaims: rows }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ spiffClaims: await claimsSeen(auth, rows) }) };
         }
 
         // ── POST: submit a new claim (reps) ───────────────────────────────────
@@ -136,7 +149,7 @@ export const handler = async (event) => {
                 [inserted] = done.at(-1);
             } catch (e) {
                 if (!claimRefused(e)) throw e;
-                if (!(await ownIdTaken(spiffClaims, claim.id, orgId))) return await alreadyClaimed(orgId, claim);
+                if (!(await ownIdTaken(spiffClaims, claim.id, orgId))) return await alreadyClaimed(auth, claim);
             }
             // Held in THIS org: an earlier press of this create landed (state §0.261, the unknown-save rule's Part 6) — said
             // with code 'idInUse', which the screen reads as landed. Another org's id: the words alone, below.
@@ -230,7 +243,7 @@ export const handler = async (event) => {
                 [updated] = done.at(-1);
             } catch (e) {
                 if (!claimRefused(e)) throw e;
-                return await alreadyClaimed(orgId, pair);
+                return await alreadyClaimed(auth, pair);
             }
             if (!updated) {
                 // Touched nothing: the claim as it stands now decides (state §0.276), nothing written — gone: the 404; for

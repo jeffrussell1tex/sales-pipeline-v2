@@ -125,7 +125,9 @@ export const handler = async (event) => {
             await writeAudit(orgId, {
                 action: 'coaching_note.created', entityType: 'coaching_note', entityId: inserted.id,
                 entityName: audience.teamId ? `team ${audience.teamId}` : `${audience.recipientIds.length} recipient(s)`,
-                detail: text.slice(0, 120), userId,
+                // Never the note's words (state §0.298): the audit log is every Manager's, and goes to the org's destinations; a
+                // note to people is its author's, its recipients' and Admins' (§0.82).
+                detail: null, userId,
             });
             return reply(201, { coachingNote: inserted });
         }

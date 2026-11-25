@@ -39,9 +39,9 @@ test('every write that can move a score scores its deal again, and hands it back
     assert.ok(opp.includes('JSON.stringify({ opportunity: withDealScore(upserted, await rescoreDeals(orgId, [upserted.id])) })'));
     assert.ok(opp.includes('await rescoreDeals(orgId, keyed.rows.map(r => r.id).filter(id => !unwritten.has(id)));'), 'an import\'s rows written, never one refused');
     const acts = code(read('netlify/functions/activities.mjs'));
-    assert.ok(acts.includes('dealScores: await rescoreDeals(orgId, [inserted.opportunityId])'), 'a logged activity');
-    assert.ok(acts.includes('dealScores: await rescoreDeals(orgId, [upserted.opportunityId, target.opportunityId])'), 'an edit — the deal it names and the one it named');
-    assert.ok(acts.includes('dealScores: await rescoreDeals(orgId, [deletedRow.opportunityId])'), 'a delete');
+    assert.ok(acts.includes('dealScores: await scoresSeen(auth, await rescoreDeals(orgId, [inserted.opportunityId]))'), 'a logged activity');
+    assert.ok(acts.includes('dealScores: await scoresSeen(auth, await rescoreDeals(orgId, [upserted.opportunityId, target.opportunityId]))'), 'an edit — the deal it names and the one it named');
+    assert.ok(acts.includes('dealScores: await scoresSeen(auth, await rescoreDeals(orgId, [deletedRow.opportunityId]))'), 'a delete');
     const backup = code(read('netlify/functions/backup.mjs'));
     assert.ok(backup.includes('try { await scoreOrgDeals(orgId, { train: false }); }'), 'a restore scores the org after it lands');
 });

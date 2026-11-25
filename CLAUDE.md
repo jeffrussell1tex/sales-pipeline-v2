@@ -537,6 +537,9 @@ One commit per verified batch; doc patch in the same commit.
   switch), and each 401, 403 or gate answer it returns, left out in memory, must change an answer or be named
   with why none can (three are). A new function, method or gate gets its line in `tests/gates/answers.mjs` and
   a request that reaches it (THE GUARD, tests/gate-matrix.test.mjs; guide §18b137).
+- What an answer holds is run too (§0.298): every statement the requests reach is read as drizzle's SQL and held to the
+  caller's org, or named with what holds it; the rows and record fields every GET the fakes let answer gives each role are
+  the lines of `tests/gates/rows.mjs` — read each changed line as a change in who is shown what (THE GUARD, tests/row-matrix.test.mjs; guide §18b141).
 - A read the server decides on, or whose value is stored, throws when it fails — never its default, an empty list
   or "no row" (§0.292; the one exception is Jeff's: an alert not known to have gone goes again, §0.293): `resolveCaller` throws (nulls are a member with no row here); `getCallerName` is a label —
   a maker's name, none on a failure — nothing decides on; a read after a landed write keeps its own catch (THE GUARD, tests/failed-reads.test.mjs;

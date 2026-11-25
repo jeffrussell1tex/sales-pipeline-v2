@@ -107,7 +107,7 @@ export const dispatchWebhook = async (orgId, eventType, data) => {
             // Update lastFiredAt + lastStatus (fire and forget)
             db.update(webhookSubscriptions)
               .set({ lastFiredAt: new Date(), lastStatus: status, updatedAt: new Date() })
-              .where(eq(webhookSubscriptions.id, sub.id))
+              .where(and(eq(webhookSubscriptions.id, sub.id), eq(webhookSubscriptions.orgId, orgId)))
               .catch(err => console.error('webhook status update failed:', err.message));
         }));
     } catch (err) {
@@ -238,7 +238,7 @@ export const handler = async (event) => {
                 updates.secret = newSecret;
             }
 
-            await db.update(webhookSubscriptions).set(updates).where(eq(webhookSubscriptions.id, data.id));
+            await db.update(webhookSubscriptions).set(updates).where(and(eq(webhookSubscriptions.id, data.id), eq(webhookSubscriptions.orgId, orgId)));
             // A rotated secret is its own event (§0.143): the old signature stops verifying from this moment.
             await auditAs(orgId, userId, {
                 action: newSecret ? 'webhook.secret_rotated' : 'webhook.updated', entityType: 'webhook', entityId: existing.id, entityName: updates.name ?? existing.name,
@@ -269,7 +269,7 @@ export const handler = async (event) => {
             // screen reads as done (landedBefore), never "not deleted" over a row that is gone.
             if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Webhook not found.', code: 'gone' }) };
 
-            await db.delete(webhookSubscriptions).where(eq(webhookSubscriptions.id, id));
+            await db.delete(webhookSubscriptions).where(and(eq(webhookSubscriptions.id, id), eq(webhookSubscriptions.orgId, orgId)));
             await auditAs(orgId, userId, { action: 'webhook.deleted', entityType: 'webhook', entityId: existing.id, entityName: existing.name, detail: `${hostOf(existing.targetUrl)} · ${(existing.eventTypes || []).join(', ')}` });
 
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };

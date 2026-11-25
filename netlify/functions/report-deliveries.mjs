@@ -37,7 +37,7 @@ import { writeAudit } from './_lib.mjs';
 import { runReport } from '../../src/utils/reportQuery.js';
 import { fiscalStartOf } from '../../src/utils/quarters.js';
 import {
-    cleanDelivery, deliveryDue, deliveryHasChannel, deliveryTable, deliveryHtmlTable, slackBlocksForReport, periodLabel,
+    cleanDelivery, deliveryDue, deliveryHasChannel, deliveryTable, deliveryHtmlTable, slackBlocksForReport, periodLabel, noAddresses,
 } from '../../src/utils/reportDelivery.js';
 
 import { isPlaceholderEmail } from '../../src/utils/orgIdentity.js';
@@ -83,7 +83,8 @@ export async function loadReportData(orgId, owner) {
 
 /**
  * Run one saved report and send it where its schedule says.
- * → { ok, sent: { email: [addresses], slack: bool }, errors: [], rows }
+ * → { ok, sent: { email: [names], slack: bool }, errors: [], rows } — by member name (state §0.298): a Send now's answer is
+ *   read by the report's owner, or an Admin who pressed it, its last error by every reader of a shared report; a rep's directory carries no address (§0.193).
  */
 export async function deliverReport(row, { now = new Date(), trigger = 'schedule' } = {}) {
     const d = cleanDelivery(row?.config?.delivery);
@@ -114,8 +115,8 @@ export async function deliverReport(row, { now = new Date(), trigger = 'schedule
                 tableHtml: deliveryHtmlTable(table), count: table.count, url, cadence: d.cadence, trigger, orgId: row.orgId,
             });
             await sendEmail({ to: r.email, ...tpl });
-            sent.email.push(r.email);
-        } catch (e) { errors.push(`email to ${r.email}: ${String(e.message || e).slice(0, 120)}`); }
+            sent.email.push(r.name || 'A member');
+        } catch (e) { errors.push(`email to ${r.name || 'a member'}: ${noAddresses(String(e.message || e)).slice(0, 120)}`); }
     }
     if (d.slack) {
         const posted = await sendSlackToOrg(row.orgId, slackBlocksForReport({ name: row.name, source: row.source, period, from, to, ownerName: owner.name, table, url }));

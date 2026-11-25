@@ -88,6 +88,16 @@ function generateSnapId() {
     return `bk_snap_${y}_${mo}_${d}_${h}${mi}_${randomBytes(6).toString('hex')}`;
 }
 
+// A settings row's extra with no AI key in it (state §0.298): not the stored one, encrypted, nor one an earlier AI panel kept
+// as typed inside aiSettings. A backup's file carries none; a restored file's is not this org's (§0.161).
+const keysOff = (extra) => {
+    const { anthropicApiKey: _stored, ...rest } = extra;
+    if (!rest.aiSettings || typeof rest.aiSettings !== 'object') return rest;
+    const { byokKey: _k, apiKey: _a, anthropicApiKey: _t, ...ai } = rest.aiSettings;
+    if (/^\s*sk-/.test(ai.byokProvider || '')) ai.byokProvider = 'Anthropic';
+    return { ...rest, aiSettings: ai };
+};
+
 // Collect all org data and return as a serialised JSON string + stats.
 // Called for both POST (record metrics) and GET ?download=1 (serve the file).
 async function collectOrgData(orgId) {
@@ -117,7 +127,7 @@ async function collectOrgData(orgId) {
             tasks:         tsks,
             activities:    acts,
             users:         usrs,
-            settings:      sets,
+            settings:      sets.map((s) => (s.extra && typeof s.extra === 'object' ? { ...s, extra: keysOff(s.extra) } : s)),
             quotes:        qts,
             products:      prods,
             pipelines:     pipes,
@@ -389,7 +399,7 @@ export const handler = async (event) => {
             // on org_id, a restore fills an org that has no settings row, and changes
             // nothing for one that has.
             const ownSettings = (rows) => rows.map(r => {
-                const extra = r?.extra && typeof r.extra === 'object' && !Array.isArray(r.extra) ? { ...r.extra } : {};
+                const extra = r?.extra && typeof r.extra === 'object' && !Array.isArray(r.extra) ? keysOff(r.extra) : {};
                 if (extra.webToLead && typeof extra.webToLead === 'object') extra.webToLead = { ...extra.webToLead, token: null, enabled: false };
                 // The deal model is the server's (AI scoring batch 2A): trained from the org's own deals, never a file's.
                 delete extra.dealModel;

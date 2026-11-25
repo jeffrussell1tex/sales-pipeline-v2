@@ -84,6 +84,8 @@ const MORE = {
     // A create and a settings save naming a pipeline of the org (state §0.297): the matrix's made-up ones are refused before the caller is read.
     settings: [{ method: 'PUT', what: 'pipelines', body: { pipelines: [{ id: 'default', name: 'New Business' }] } }],
     opportunities: [{ method: 'POST', what: 'its pipeline', body: { id: 'x1', pipelineId: 'default' } }, { method: 'PUT', what: 'bulk overwrite', body: [{ id: 'd1', stage: 'Proposal' }], rows: { opportunities: [DEAL], users: [ME] } }],
+    // Which claims a rep is answered turns on who they are (state §0.298).
+    'spiff-claims': [{ method: 'GET', what: 'claims', qs: {}, rows: { spiff_claims: [{ id: 'c1', orgId: 'org_a', opportunityId: 'd1', spiffId: 'sp', repName: ME.name }], opportunities: [DEAL], users: [ME] } }],
     'email-inbound': [{ method: 'GET', what: 'my address', env: { BCC_SECRET: 'test', INBOUND_DOMAIN: 'in.test' }, rows: { users: [ME] } }],
 };
 // Every function, as every role, with every request the gate matrix knows: where the caller's read fails the request is
@@ -147,7 +149,7 @@ const EXPECT_THREW = [
     'dispatch-plan-visits POST', 'documents DELETE GET PATCH POST PUT', 'duplicates GET', 'email-inbound GET',
     'lead-requests DELETE GET POST PUT', 'leads DELETE GET POST PUT', 'mention-sms POST', 'opportunities DELETE GET POST PUT',
     'quote-email POST', 'quote-pdf POST', 'quote-to-job GET POST', 'quotes GET POST PUT', 'recommendation-log GET POST PUT',
-    'spiff-claims POST PUT', 'tasks DELETE GET POST PUT', 'users PUT',
+    'spiff-claims GET POST PUT', 'tasks DELETE GET POST PUT', 'users PUT',
 ];
 const EXPECT_NAMED = [
     'api-keys POST', 'audit-log POST', 'backup POST PUT', 'calendar-connections DELETE', 'dispatch-customers DELETE POST PUT',

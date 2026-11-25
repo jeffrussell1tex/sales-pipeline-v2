@@ -82,7 +82,10 @@ export const handler = async (event) => {
             const [q] = await db.select({ opportunityId: quotes.opportunityId }).from(quotes)
                 .where(and(eq(quotes.id, String(quoteId)), eq(quotes.orgId, orgId))).limit(1);
             if (!q || !(await dealAccess(auth, q.opportunityId)).canRead) return reply(404, { error: 'Quote not found' });
-            return reply(200, { job: await linkedJob(orgId, quoteId) });
+            // What the quote's card draws, with the job's and its invoice's ids, and no more (state §0.298): the whole job was answered — its customer's status
+            // link, its costs, its crew — to anyone who may read the quote.
+            const job = await linkedJob(orgId, quoteId);
+            return reply(200, { job: job && { id: job.id, jobNumber: job.jobNumber, status: job.status, scheduledDate: job.scheduledDate, invoice: job.invoice } });
         }
 
         if (event.httpMethod !== 'POST') return reply(405, { error: 'Method not allowed' });

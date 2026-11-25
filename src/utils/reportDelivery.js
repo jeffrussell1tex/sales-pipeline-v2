@@ -134,6 +134,9 @@ export function deliverySummary(delivery) {
     return `${base} · ${to.length ? to.join(' · ') : 'no recipients'}`;
 }
 
+/** The words with every email address taken out (state §0.298): a delivery's last error is read by whoever the report is shared with. */
+export const noAddresses = (words) => (typeof words === 'string' ? words.replace(/[^\s<>"'(),;:]+@[^\s<>"'(),;:]+/g, 'a member') : words);
+
 /**
  * A report result as a plain table: the dimension labels then the metric
  * labels as the header; one row per group, formatted; a total row when the

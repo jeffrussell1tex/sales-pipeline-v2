@@ -10,7 +10,7 @@
 //          (requireWrite) still runs first in every endpoint; this is the object half.
 import { db } from '../../db/index.js';
 import { opportunities, settings as settingsTable } from '../../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { crmReadScope, canSeeAll, dealVisibleTo } from '../../src/utils/roles.js';
 import { mayMutate } from './_ownership.mjs';
 import { getCallerId } from './_lib.mjs';
@@ -37,6 +37,32 @@ export async function dealReadContext(auth) {
         callerId: own ? await getCallerId(auth.userId, auth.orgId) : null,
         unassignedVisible: own ? await getUnassignedDealsVisible(auth.orgId) : false,
     };
+}
+
+// Of these deals, the ones of this org the caller may read (state §0.298): their ids. Asked for what hangs on a
+// deal: a score an activity's write hands back (scoresSeen), answered only where its deal is; a SPIFF claim (spiff-claims.mjs
+// claimsSeen), answered to a rep where its deal is or it is their own. One read of the deals named, none for none.
+export async function readableDealIds(auth, ids) {
+    const asked = [...new Set((ids || []).filter((id) => typeof id === 'string' && id))];
+    if (!asked.length || crmReadScope(auth.userRole) === 'none') return new Set();
+    const rows = await db.select({ id: opportunities.id, ownerId: opportunities.ownerId, salesRep: opportunities.salesRep })
+        .from(opportunities)
+        .where(and(inArray(opportunities.id, asked), eq(opportunities.orgId, auth.orgId)));
+    const ctx = await dealReadContext(auth);
+    return new Set(rows.filter((d) => dealVisibleTo(d, ctx)).map((d) => d.id));
+}
+// The scores a write handed back, of the deals the caller may read: an activity may name any deal of the org, and its score
+// says how that deal stands. Read after the write landed: one that fails answers none, never a 500 over it (guide §18b138).
+export async function scoresSeen(auth, scores) {
+    const ids = Object.keys(scores || {});
+    if (!ids.length) return {};
+    try {
+        const seen = await readableDealIds(auth, ids);
+        return Object.fromEntries(ids.filter((id) => seen.has(id)).map((id) => [id, scores[id]]));
+    } catch (e) {
+        console.warn('deal scores not handed back:', e.message);
+        return {};
+    }
 }
 
 // One deal, in this org: { deal, canRead, canWrite }. A deal that is not this

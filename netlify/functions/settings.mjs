@@ -193,7 +193,8 @@ const handle = async (event, retry) => {
                 // Written server-side by integration-requests.mjs (§0.90); read by
                 // the Connected Apps panel. Carried here so an Admin settings save
                 // never wipes it.
-                integrationRequests: row.extra?.integrationRequests || {},
+                // …an Admin's (state §0.298): who asked, by Clerk id, and their note were handed to every role.
+                integrationRequests: isAdmin(userRole) ? (row.extra?.integrationRequests || {}) : {},
                 // The org's deal model and its standing (AI scoring batch 2A): written only by the nightly pass and Train now
                 // (_dealScore.mjs); read by Settings' Deal scoring card. None until the first pass.
                 dealModel: row.extra?.dealModel || null,

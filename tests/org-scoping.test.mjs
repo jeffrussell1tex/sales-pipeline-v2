@@ -21,7 +21,7 @@ const FN_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'netlify', 'f
 // exemption cannot quietly widen.
 // quote-pdf.mjs left this list in state §0.241: it reads the stored quote and its deal now, so it is scanned as every
 // tenant reader is.
-const SKIP = new Set(['auth.mjs', '_lib.mjs', 'score-lead.mjs', 'send-email.mjs', 'send-sms.mjs', 'crypto.mjs', 'webhooks.mjs', '_heartbeat.mjs']);
+const SKIP = new Set(['auth.mjs', '_lib.mjs', 'score-lead.mjs', 'send-email.mjs', 'send-sms.mjs', 'crypto.mjs', '_heartbeat.mjs']);
 
 // Extract the full JS statement starting at `start` (balances () [] {} and skips
 // '…' "…" `…` strings), stopping at the first top-level ';'.
@@ -91,7 +91,7 @@ test('the guard sees a db chain split across lines and a raw SQL write', () => {
 
 test('every tenant mutation in netlify/functions is org-scoped', () => {
     const files = readdirSync(FN_DIR).filter(f => f.endsWith('.mjs') && !SKIP.has(f));
-    assert.ok(files.length > 97, 'expected the 98 function files this guard scans (106, less the 8 it skips)');
+    assert.ok(files.length > 102, `expected the 103 function files this guard scans (110, less the 7 it skips): ${files.length}`);
 
     const violations = [];
     for (const f of files) {

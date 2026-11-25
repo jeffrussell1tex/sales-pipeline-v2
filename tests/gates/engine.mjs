@@ -13,27 +13,40 @@ export const ROOT = new URL('../../', import.meta.url);
 const dataUrl = (code) => 'data:text/javascript,' + encodeURIComponent(code);
 const G = globalThis.__gates = { auth: null, ops: [], rows: {} };   // who asks, what was asked of the database, what it answers
 
-// A chain of any drizzle calls, answering the request's rows for the table it names; each statement recorded.
+// A chain of any drizzle calls, answering the request's rows for the table it names; each statement recorded. Where a suite
+// asks for them (G.sql — tests/row-matrix.test.mjs), each statement as drizzle writes it too: the same calls are made on
+// drizzle's own builder, which sends nothing, and op.sql() renders it — a fake statement inside another (a subquery, a
+// batch's) is its own there.
 const DB = dataUrl(`
+import { drizzle } from '${new URL('node_modules/drizzle-orm/pg-proxy/index.js', ROOT)}';
 const G = globalThis.__gates;
+const REAL = drizzle(async () => { throw new Error('the builder sends nothing'); });
+const OPS = new WeakMap();   // a fake statement → what it records
+const realOf = (a) => { try { return (a !== null && typeof a === 'function' && OPS.has(a) && OPS.get(a).real) || a; } catch { return a; } };
+const also = (op, make) => { if (!G.sql) return; try { op.real = make(); } catch (e) { op.real = null; op.unread = e.message; } };
+const here = () => { const line = G.sites && (new Error().stack.split('\\n').find((l) => /netlify\\/functions\\/\\w[\\w-]*\\.mjs/.test(l)) || ''); const m = line && /netlify\\/functions\\/([\\w-]+\\.mjs)[^:]*:(\\d+):\\d+/.exec(line); if (m) G.sites.add(m[1] + ':' + m[2]); };
+const read = (op) => { here(); op.sql = () => { const q = op.real?.toSQL ? op.real.toSQL() : null; return q && { text: q.sql, params: q.params }; }; return op; };
 const nameOf = (t) => t?.[Symbol.for('drizzle:Name')] || '';
 // A statement that names its columns is answered those alone, each from the column it names (a SQL expression: its alias).
 const keyOf = (c) => (c?.table && c?.name ? Object.keys(c.table).find((k) => c.table[k] === c) : null);
 const shaped = (fields, rows) => (!fields ? rows : rows.map((r) => Object.fromEntries(Object.entries(fields).map(([alias, c]) => [alias, r[keyOf(c) || alias]]))));
-const chain = (op) => new Proxy(function () {}, { get: (_, k) => {
-    const run = () => Promise.resolve().then(() => shaped(op.fields, (typeof G.rows === 'function' ? G.rows(op) : G.rows[op.table]) || []));
+const chain = (op) => { const p = new Proxy(function () {}, { get: (_, k) => {
+    if (k === 'getSQL' && op.real) return () => op.real.getSQL();
+    if (k === 'shouldOmitSQLParens') return undefined;
+    const run = () => Promise.resolve().then(() => shaped(op.fields, ((typeof G.rows === 'function' ? G.rows(op) : G.rows[op.table]) || []).map((r) => (r && typeof r === 'object' && !Array.isArray(r) ? { ...r } : r))));   // its own copies: a handler that reverses, or writes on, what it read changes no other's
     if (k === 'then') return (ok, no) => run().then(ok, no);
     if (k === 'catch') return (no) => run().catch(no);
     if (k === 'finally') return (f) => run().finally(f);
-    return (...a) => { if (k === 'from' && !op.table) op.table = nameOf(a[0]); if (k === 'returning' && a[0]) op.fields = a[0]; if (k === 'values' || k === 'set') op.given = a[0]; return chain(op); };
-} });
-const start = (kind) => (t) => { const op = { kind, table: kind === 'select' ? '' : nameOf(t), fields: kind === 'select' ? t : null }; G.ops.push(op); return chain(op); };
+    return (...a) => { if (k === 'from' && !op.table) op.table = nameOf(a[0]); if (k === 'returning' && a[0]) op.fields = a[0]; if (k === 'values' || k === 'set') op.given = a[0]; if (op.real && typeof op.real[k] === 'function') also(op, () => op.real[k](...a.map(realOf))); return chain(op); };
+} }); OPS.set(p, op); return p; };
+const start = (kind, on = () => REAL) => (t) => { const op = read({ kind, table: kind === 'select' ? '' : nameOf(t), fields: kind === 'select' ? t : null }); also(op, () => (t === undefined ? on()[kind]() : on()[kind](t))); G.ops.push(op); return chain(op); };
 export const db = {
     select: start('select'), selectDistinct: start('select'), insert: start('insert'), update: start('update'), delete: start('delete'),
-    execute: async () => { G.ops.push({ kind: 'execute', table: '' }); return { rows: [] }; },
+    execute: (q) => { here(); const op = { kind: 'execute', table: '', sql: () => { const x = REAL.dialect.sqlToQuery(q); return { text: x.sql, params: x.params }; } }; G.ops.push(op); return Promise.resolve({ rows: [] }); },
     batch: async (list) => { G.ops.push({ kind: 'batch', table: '' }); return Promise.all(list); },
     transaction: async (f) => { G.ops.push({ kind: 'batch', table: '' }); return f(db); },
-    $with: () => ({ as: (x) => x }), with: () => db,
+    $with: (n) => ({ as: (x) => (G.sql ? REAL.$with(n).as(realOf(x)) : x) }),
+    with: (...c) => (G.sql ? { ...db, ...Object.fromEntries(['select', 'insert', 'update', 'delete'].map((k) => [k, start(k, () => REAL.with(...c))])) } : db),
 };
 `);
 const AUTH = dataUrl(`
@@ -83,7 +96,7 @@ registerHooks({
     },
 });
 // No secret or key of the machine's own, and no job switched on: a request names what it needs (`env`).
-for (const k of Object.keys(process.env)) if (/SECRET|_KEY|TOKEN|DATABASE|JOBS_|^R2_|GOOGLE|MICROSOFT|RESEND|TWILIO|INBOUND|^URL$|CLERK|ANTHROPIC/.test(k)) delete process.env[k];
+for (const k of Object.keys(process.env)) if (/SECRET|_KEY|TOKEN|DATABASE|JOBS_|^R2_|GOOGLE|MICROSOFT|RESEND|TWILIO|INBOUND|^URL$|^SITE|^APP_URL$|CLERK|ANTHROPIC/.test(k)) delete process.env[k];
 process.env.CLERK_SECRET_KEY = 'sk_test_gates';
 globalThis.fetch = async () => { G.ops.push({ kind: 'fetch', table: '' }); throw new Error('no network in this test'); };
 for (const k of ['log', 'info', 'warn', 'error']) console[k] = () => {};   // each refusal logs its own line
@@ -116,7 +129,7 @@ export async function ask(handler, f, r, role) {
     G.clerk = r.clerk || {};
     G.auth = role === null ? { error: 'Unauthorized: no token', status: 401 }
         : role === TURNED_OFF ? { error: 'Your access to this organization has been turned off.', status: 403, code: 'deactivated' }
-        : { userId: r.userId || 'user_me', orgId: 'org_a', userRole: role, managedReps: [], orgRole: null, error: null };
+        : { userId: r.userId || 'user_me', orgId: 'org_a', userRole: role, managedReps: r.managedReps || [], orgRole: null, error: null };
     const event = { httpMethod: r.method, headers: made(r.headers) || {}, queryStringParameters: made(r.qs) || { id: 'x1' }, path: `/.netlify/functions/${f}`,
         body: r.method === 'GET' ? null : typeof r.body === 'string' ? r.body : JSON.stringify(r.body || { id: 'x1' }) };
     const env = Object.entries(r.env || {}), before = env.map(([k]) => [k, process.env[k]]);

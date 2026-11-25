@@ -4916,7 +4916,7 @@ THE GUARD: tests/order-pins.test.mjs (every order pin over tests/ and tests/inte
 2. **A changed line there is a changed right** — read it against the rule before changing it, never to make the test pass.
 3. **A refusal comes before any write, raw statement, stored file, Clerk write or send** — save one named with its reason (`afterWrite`: a write whose own WHERE or claim touches nothing, four today) — and a caller sign-in refused asks the database nothing (the public and scheduled functions named in PUBLIC).
 4. **A request's rows are the rows as stored**: the fake answers a statement the columns it names, so a check that reads its owner from the wrong column fails.
-5. **What it does not read needs a suite of its own**: what a 200 holds (some lists and masks have no unit suite today — OPEN_ITEMS §4.6, §0.288's (j)), SQL filters, a write that touched no row, a bulk write's forbidden rows, 400s and 404s no aimed request asks, rules keyed on managedReps, one part of a condition, scheduled functions past their off switch, sign-in.
+5. **What it does not read needs a suite of its own**: what a 200 holds (a GET's is run by tests/row-matrix.test.mjs, §18b141; most writes' answers and a sign-in's masks by no matrix), SQL filters, a write that touched no row, a bulk write's forbidden rows, 400s and 404s no aimed request asks, rules keyed on managedReps, one part of a condition, scheduled functions past their off switch, sign-in.
 
 THE GUARD: tests/gate-matrix.test.mjs.
 
@@ -4932,6 +4932,21 @@ THE GUARD: tests/gate-matrix.test.mjs.
 6. **A dedupe is the one read whose failure is an answer, by Jeff's choice** (§0.293, 23 Nov: "Send alert again"): an alert or a reminder not known to have gone goes again, the org's rules with it (pipeline-alerts.mjs `wasRecentlyAlerted`, task-reminders.mjs `wasReminderSent`; held by tests/own-key.test.mjs) — never skipped on a failed read, and no other read takes this shape without his word.
 
 THE GUARD: tests/failed-reads.test.mjs (every function as every role, the caller's read rejected; each other read rejected alone); tests/integration/failed-reads.itest.mjs.
+
+## 18b141. What An Answer Holds Is Run (hard rule)
+
+**Origin (§0.298, 24 Nov 2026; OPEN_ITEMS §4.6, §0.288 (j)).** The gate matrix runs who is refused; nothing ran, function by function and role by role, what a 200 holds (some integration suites assert some rows). Within one org: every SPIFF claim to every role, a deal's score to whoever named the deal, a private note's words in the audit log, members' addresses in a shared report, a whole job on a quote, an AI key in a backup's file.
+
+1. **What hangs on a record is answered where the record is** — a claim, a score, a job on a quote: ask `readableDealIds` / `scoresSeen` (_dealAccess.mjs), or hand back the fields the screen draws, never the row.
+2. **A write's answer is an answer**: what it hands back beside its own row is read by the caller's rule. Read after the write landed, a failed read answers none (§18b138).
+3. **What is kept beside a record is read by someone else** — an audit row, a last error, a destination's line: no private words, no key, and no member's address in a report's delivery (its recipients by name, `noAddresses` on an error). An audit row still names a customer's, lead's or contact's address where it says what happened.
+4. **No GET answers a stored AI key, signing secret, API key hash or calendar token** (a masked hint aside; a secret is answered once, where it is made or rotated) — nor a backup's file an AI key. Not held by this: a job's status token, the web form's token (OPEN_ITEMS §4.6, left by §0.298 (a)) and the Slack webhook URL (an Admin's); a backup's file holds the last two.
+5. **Each statement holds its tables to the caller's org in its own where or join** (an update's and a delete's too, after a read in the org), by an equality every row must meet — never inside an `or`, a `not`, a case or a function.
+6. **A new GET, or a new list, record field or select's condition on one, is read against tests/gates/rows.mjs**: `ROWS_OUT=<file> node --test tests/row-matrix.test.mjs` writes the table as JSON (never onto rows.mjs itself), and each changed line is read for who is shown what. It does not change for a GET the fakes answer no 200 (give it an EXTRA request), a field inside an object with no id, a filter that leaves out none of the seeded rows, or a raw statement's condition. A new statement no request reaches fails THE GUARD until one does (a request in tests/gates/requests-*.mjs; EXTRA in tests/row-matrix.test.mjs where a GET's parameters go together) — those unreached already are counted by file in rows.mjs's UNREACHED, which only falls — and one that finds its org otherwise is named with what holds it.
+
+THE GUARD: tests/row-matrix.test.mjs (tests/gates/sqlOrg.mjs, rows.mjs). It does not read what a condition answers on a real database, most answers of a write, a sign-in's masks (auth.mjs), what a scheduled job does past its off switch, calendar-oauth-callback's own client, or the SQL of a statement no request reaches.
+
+---
 
 ## 18b140. A Deal's Pipeline Is One Of Its Org's (hard rule)
 

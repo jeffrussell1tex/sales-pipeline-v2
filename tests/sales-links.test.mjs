@@ -351,7 +351,7 @@ test("spiff-claims POST: an id and a SPIFF are required — a SPIFF of spaces is
         ind(20, '.onConflictDoNothing({ target: spiffClaims.id }).returning()]);'),
         ind(16, '[inserted] = done.at(-1);'),
         ind(16, 'if (!claimRefused(e)) throw e;'),
-        ind(16, 'if (!(await ownIdTaken(spiffClaims, claim.id, orgId))) return await alreadyClaimed(orgId, claim);'),
+        ind(16, 'if (!(await ownIdTaken(spiffClaims, claim.id, orgId))) return await alreadyClaimed(auth, claim);'),
         ind(12, "if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That claim id is already in use.' }) };"));
     before(post, "if (!inserted) return { statusCode: 409,", "action: 'spiff_claim.submitted'", 'answered before the audit, which reads the row');
     assert.ok(!post.includes('data.repName'), "REGRESSION: the rep tested on the body — a rep's claim refused for a name the server replaces with hers (review F1)");
@@ -377,7 +377,7 @@ test('one claim for a deal and a SPIFF (state §0.295): the statements the creat
     for (const opportunityId of [null, undefined, '', '  ']) assert.deepEqual(pairFree('org_a', { id: 'c2', opportunityId, spiffId: 's1' }), [], 'no deal: nothing to claim twice');
     assert.equal(sent.length, 2);
     assert.equal(count(s, 'if (!claimRefused(e)) throw e;'), 2, 'REGRESSION: a failed write answered as claimed already');
-    assert.ok(s.includes("body: JSON.stringify({ error: 'This SPIFF is already claimed for this deal.', code: 'claimed', ...(held ? { spiffClaim: held } : {}) })") && s.includes('const [held] = await db.select().from(spiffClaims).where(pairOf(orgId, opportunityId, spiffId, id)).limit(1);'));
+    assert.ok(s.includes("body: JSON.stringify({ error: 'This SPIFF is already claimed for this deal.', code: 'claimed', ...(held ? { spiffClaim: held } : {}) })") && s.includes('const [held] = await claimsSeen(auth, await db.select().from(spiffClaims).where(pairOf(auth.orgId, opportunityId, spiffId, id)).limit(1));'));
     assert.ok(s.includes('const pair = { id, opportunityId: clean.opportunityId, spiffId: clean.spiffId };'), 'as the row would stand, not as the body names it');
     assert.ok(s.includes("const pairAsRead = ['opportunityId', 'spiffId'].some((k) => Object.hasOwn(named, k))\n                ? and(sql`${spiffClaims.opportunityId} is not distinct from ${existing.opportunityId}`, eq(spiffClaims.spiffId, existing.spiffId))\n                : undefined;"));
 });
@@ -426,7 +426,7 @@ test("spiff-claims PUT: an id that is no text is 400; a claim this org does not 
         ind(20, '.returning()]);'),
         ind(16, '[updated] = done.at(-1);'),
         ind(16, 'if (!claimRefused(e)) throw e;'),
-        ind(16, 'return await alreadyClaimed(orgId, pair);'),
+        ind(16, 'return await alreadyClaimed(auth, pair);'),
         ind(16, "if (!now) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };"));
     assert.equal(count(put, NOT_HELD), 1, "one 404 for a claim this org does not hold — every role's");
     assert.ok(!between(put, ind(12, 'if (isRep) {'), 'changes = ownFields;').includes('if (!existing)'), "not the rep's alone: a manager's save of an unknown id created a claim");

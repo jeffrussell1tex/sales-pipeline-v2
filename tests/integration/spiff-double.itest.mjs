@@ -74,10 +74,17 @@ after(clean);
 test('a second claim of a deal\'s SPIFF is refused, writing nothing — another member\'s, a Manager\'s, or the rep\'s own; the claim that stands is handed back', async () => {
     await clear();
     assert.equal((await call('POST', claim('one'))).status, 201);
-    for (const who of [{}, { user: CLERK.rep2 }, mgr]) {
+    // Handed back where the caller may read it (state §0.298 - reversed by design for another rep, on a deal that is not theirs).
+    for (const [who, held] of [[{}, 'itest_spiff_double_one'], [{ user: CLERK.rep2 }, undefined], [mgr, 'itest_spiff_double_one']]) {
         const r = await call('POST', claim('two'), who);
-        assert.deepEqual([r.status, r.body.error, r.body.code, r.body.spiffClaim?.id], [409, CLAIMED, 'claimed', 'itest_spiff_double_one']);
+        assert.deepEqual([r.status, r.body.error, r.body.code, r.body.spiffClaim?.id], [409, CLAIMED, 'claimed', held]);
+        assert.deepEqual((await call('GET', null, who)).body.spiffClaims.map((c) => c.id), held ? [held] : [], 'the list likewise');
     }
+    assert.deepEqual((await call('GET', null, { role: 'Technician', user: CLERK.rep })).body.spiffClaims, [], 'a technician reads none');
+    await db.update(opportunities).set({ ownerId: 'usr_itest_spiff_double_rep2' }).where(eq(opportunities.id, DEAL));
+    assert.deepEqual((await call('GET', null, { user: CLERK.rep2 })).body.spiffClaims.length, 1, 'on their own deal, theirs to read');
+    await db.update(opportunities).set({ ownerId: null }).where(eq(opportunities.id, DEAL));
+    assert.deepEqual((await call('GET', null, { ...mgr, org: B })).body.spiffClaims, [], "another org's: none");
     assert.deepEqual(await stored(), ['one'], 'REGRESSION: one deal\'s SPIFF claimed twice — and paid twice');
     const audits = await db.select().from(auditLog).where(eq(auditLog.orgId, A));
     assert.equal(audits.filter((x) => x.action === 'spiff_claim.submitted').length, 1, 'no audit row for a claim not filed');

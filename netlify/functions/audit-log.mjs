@@ -12,7 +12,7 @@ export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
-    const { orgId, userId } = auth;
+    const { orgId, userId, userRole } = auth;
 
     // The audit log is the evidence trail for every other control in the app,
     // so it is append-only, its actor fields are server-derived, and it takes
@@ -24,7 +24,9 @@ export const handler = async (event) => {
             const denied = requireRole(auth, ['Admin', 'Manager'], headers);
             if (denied) return denied;
             const entries = await db.select().from(auditLog).where(eq(auditLog.orgId, orgId)).orderBy(desc(auditLog.timestamp)).limit(500);
-            return { statusCode: 200, headers, body: JSON.stringify({ entries }) };
+            // A note's words an entry kept until §0.298 are an Admin's: a note to people is not every Manager's (§0.82).
+            const shown = userRole === 'Admin' ? entries : entries.map((e) => (e.entityType === 'coaching_note' ? { ...e, detail: null } : e));
+            return { statusCode: 200, headers, body: JSON.stringify({ entries: shown }) };
         }
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);

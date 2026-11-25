@@ -24,6 +24,7 @@ import { verifyAuth, requireWrite, isAdmin } from './auth.mjs';
 import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
 import { ownIdTaken } from './_lib.mjs';   // a create's taken id, this org's (state §0.261)
 import { cleanDelivery, deliverySummary } from '../../src/utils/reportDelivery.js';
+import { noAddresses } from '../../src/utils/reportDelivery.js';
 import { namedByMaker } from '../../src/utils/reportMaker.js';
 import { deliverReport } from './report-deliveries.mjs';
 
@@ -84,6 +85,9 @@ const makersNamed = async (rows, orgId) => {
     return namedByMaker(rows, roster);
 };
 
+// A report with the addresses a last error kept until §0.298 named taken out of it: read for an answer, or to be saved again.
+const addressesOff = (r) => (r.config?.delivery?.lastError ? { ...r, config: { ...r.config, delivery: { ...r.config.delivery, lastError: noAddresses(r.config.delivery.lastError) } } } : r);
+
 // config after a body: the body's config keys merge over the stored ones; the
 // delivery key is decided separately and never overwritten by a body's config.
 const configFor = (bodyConfig, existingConfig, delivery) => {
@@ -110,7 +114,7 @@ export const handler = async (event) => {
     const rowOf = async (id) => {
         const [row] = await db.select().from(savedReports)
             .where(and(eq(savedReports.id, id), eq(savedReports.orgId, orgId)));
-        return row || null;
+        return row ? addressesOff(row) : null;
     };
     const mayTouch = (row) => isAdmin(userRole) || row.ownerId === userId;
     const forbiddenOwner = { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own saved reports' }) };
@@ -122,7 +126,7 @@ export const handler = async (event) => {
             const where = isAdmin(userRole)
                 ? eq(savedReports.orgId, orgId)
                 : and(eq(savedReports.orgId, orgId), or(eq(savedReports.ownerId, userId), eq(savedReports.isShared, true)));
-            const rows = await db.select().from(savedReports).where(where).orderBy(desc(savedReports.updatedAt));
+            const rows = (await db.select().from(savedReports).where(where).orderBy(desc(savedReports.updatedAt))).map(addressesOff);
             return { statusCode: 200, headers, body: JSON.stringify({ reports: await makersNamed(rows, orgId) }) };
         }
 

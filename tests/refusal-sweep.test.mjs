@@ -13586,7 +13586,7 @@ const P12FXG5_FLOORS = [
     ['tests/single-token-file.test.mjs', 'assert.ok(readers.length >= ', [113], 'the 113 files that read T'],
     ['tests/tab-layers.test.mjs', 'assert.ok(files.length > ', [85], 'the 86 files under the tabs'],
     // The main session, last pass: the two function-file walks the fixer left at `> 0` (the verifier's G5 residuals).
-    ['tests/org-scoping.test.mjs', 'assert.ok(files.length > ', [97], 'the 98 function files the org-scoping guard scans (106, less its 8 skipped)'],
+    ['tests/org-scoping.test.mjs', 'assert.ok(files.length > ', [102], 'the 103 function files the org-scoping guard scans (110, less its 7 skipped)'],
     ['tests/function-imports.test.mjs', 'assert.ok(files.length > ', [105], 'the 106 function files whose imports must resolve'],
     // §0.287 (23 Nov): the code counts a deletion lowers, each raised to its count — the scoped run's survivor passed a
     // floor with one to spare (owner-writes' missed writes, 15 of 16).

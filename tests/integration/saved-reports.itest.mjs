@@ -168,7 +168,7 @@ test('Send now runs the report over the OWNER’s read and mails the chosen memb
     const r = await call('POST', ORG_A, { user: OWNER, params: { action: 'deliver', id: R_MINE }, body: {} });
     assert.equal(r.statusCode, 200, r.body);
     const out = json(r);
-    assert.deepEqual(out.sent, { email: ['rep@itest.local'], slack: false });
+    assert.deepEqual(out.sent, { email: ['Rep Person'], slack: false });   // by member name since §0.298 - reversed by design; the mail itself goes to the address
     assert.deepEqual(out.errors, []);
     assert.equal(out.rows, 2, 'the owner is a User: their own two deals, not the rep’s and not org B’s');
     assert.equal(mails.length, 1);

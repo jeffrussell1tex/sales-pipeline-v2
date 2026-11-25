@@ -188,7 +188,7 @@ test('the panel reads the three real sources and renders the four real integrati
 
 test('integrationRequests is carried by BOTH halves of settings.mjs (18b12)', () => {
     const s = code(read('netlify/functions/settings.mjs'));
-    assert.ok(s.includes('integrationRequests: row.extra?.integrationRequests || {},'), 'GET');
+    assert.ok(s.includes('integrationRequests: isAdmin(userRole) ? (row.extra?.integrationRequests || {}) : {},'), 'GET — an Admin\'s since §0.298');
     // Since §0.221 the server's own (Q15): a save keeps what is stored, whatever its body says.
     assert.ok(s.includes('integrationRequests: existingExtra.integrationRequests || {},'), 'PUT keeps the stored requests');
     assert.doesNotMatch(s, /data\.integrationRequests/, 'a body\'s requests are never read');
