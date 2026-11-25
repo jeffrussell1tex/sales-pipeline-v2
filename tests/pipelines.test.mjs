@@ -145,7 +145,7 @@ test('a new deal is made in the pipeline picked in its window — and an edit se
     const made = (pipelineId) => new Function('enrichedNew', 'newId', 'activePipeline', `${line}\nreturn newOpp.pipelineId;`)({ pipelineId }, 'id_1', { id: 'new-biz' });
     assert.deepEqual([made('exp'), made(''), made(undefined), made(null)], ['exp', 'new-biz', 'new-biz', 'new-biz']);
     const m = code('src/components/modals/OpportunityModal.jsx');
-    assert.ok(m.includes('    const pipelinePicked = useRef(false);') && m.includes("            ...(pipelinePicked.current ? [] : ['pipelineId']),\n        ];") && count(m, 'pipelinePicked.current = true;') === 1, 'REGRESSION: an untouched save moves the deal — its window\'s copy, or the default in place of one the org dropped');
+    assert.ok(m.includes('    const pipelinePicked = useRef(false);') && m.includes("            ...(pipelinePicked.current ? [] : ['pipelineId']),\n") && count(m, 'pipelinePicked.current = true;') === 1, 'REGRESSION: an untouched save moves the deal — its window\'s copy, or the default in place of one the org dropped');
     assert.ok(m.includes('            pipelineId:      base.pipelineId ?? activePipelineId ??'), 'the form holds what is stored, never what it counts in');
     assert.ok(m.includes('const sel = pipelineIdOf(formData, allPipelines) === p.id;') && m.includes("onClick={() => { pipelinePicked.current = true; handleChange('pipelineId', p.id); }}"), 'the one it counts in is drawn as picked');
 });

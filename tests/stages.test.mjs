@@ -228,11 +228,10 @@ test('THE GUARD: no screen draws, counts or makes a deal by a list of stages wri
     assert.ok(pipe.includes("{`${bestDeals.length} in ${bestCaseFallbackStages(openStagesOf(settings))[0] || 'no stage'}`}"));
     assert.equal(count(list, 'const commitStages = commitStagesOf(settings);'), 1);
     assert.equal(count(list, 'const commit   = opps.filter(o => commitStages.includes(o.stage))'), 1);
-    assert.deepEqual([count(list, 'qSummary(g.opps, commitStages)'), count(list, 'qSummary(activeGroup.opps, commitStages)'), count(list, 'commitStages={commitStages}'), count(list, "sub: commitStages.join(' + '),")], [1, 1, 2, 1]);
+    assert.deepEqual([count(list, 'qSummary(g.opps, commitStages, '), count(list, 'qSummary(activeGroup.opps, commitStages, '), count(list, 'commitStages={commitStages}'), count(list, "sub: commitStages.join(' + '),")], [1, 1, 2, 1]);
     const modal = code('src/components/modals/OpportunityModal.jsx');
     assert.equal(count(modal, 'const stages = orgStages(settings);'), 1);
-    for (const x of ["painPoints: '', contacts: '', stage: firstStageOf(settings),", '            stage:           base.stage ?? firstStageOf(settings),', 'const allStages = stages;', 'const target = reopenStage(stages, { left: prevOpenStageRef.current, held: opportunity?.stage, history: opportunity?.stageHistory });', 'if (!isClosed) { prevOpenStageRef.current = formData.stage || null; prevProbRef.current = formData.probability; }', 'setFormData({ ...formData, stage: target, probability: stageDefault?.weight ?? prevProbRef.current ?? formData.probability });']) assert.equal(count(modal, x), 1, x);
-    assert.equal(count(modal, '.find(s => s?.name ==='), 6, 'an entry with no name closes no window');
+    for (const x of ["painPoints: '', contacts: '', stage: firstStageOf(settings),", '            stage:           base.stage ?? firstStageOf(settings),', 'const allStages = stages;', 'const target = reopenStage(stages, { left: prevOpenStageRef.current, held: opportunity?.stage, history: opportunity?.stageHistory });', 'if (!isClosed) { prevOpenStageRef.current = formData.stage || null; prevProbRef.current = formData.probability; }']) assert.equal(count(modal, x), 1, x);
     const quotes = code('src/Tabs/QuotesTab.jsx');
     assert.ok(quotes.includes('const toQuote = useMemo(() => quoteReader(settings), [settings?.funnelStages]);') && quotes.includes('.filter(o => toQuote(o.stage) && !quotedOppIds.has(o.id))') && quotes.includes('[opportunities, quotedOppIds, toQuote]);'));
     // The funnel's figures between one stage and the next: the org's own, in order.
@@ -283,8 +282,8 @@ test('THE GUARD: every write of a deal asks the one rule, in order, and answers 
         'await checkStages(data, orgId, { priors, mayAsk: mayName });', 'data.splice(0, data.length, ...inStages.rows);', 'const staged = applyStageChanges(',
         'await checkStages([data], orgId, { priors: new Map([[data.id, existing]]) });', "if ('stage' in inStage.rows[0]) data.stage = inStage.rows[0].stage; else delete data.stage;", 'const move = stageMoveOf(existing, data, {');
     assert.ok(o.includes('    stage:              data.stage               ?? null,'), 'REGRESSION: a blank read as Discovery');
-    assert.equal(count(l, "    if (!how.create && !rows.some((r) => r && typeof r === 'object' && 'stage' in r)) return { rows };\n    return decideStages(rows, await stagesInOrg(orgId), how);"), 1);
-    assert.ok(l.includes('return orgStages({ funnelStages: row?.funnelStages ?? row?.stages });'), 'the saved list, else the old column, else the app\'s own');
+    assert.equal(count(l, "    if (!how.create && !rows.some((r) => r && typeof r === 'object' && 'stage' in r)) return { rows };\n    const funnelStages = await funnelInOrg(orgId);"), 1);
+    assert.ok(l.includes('const list = row?.funnelStages ?? row?.stages;') && l.includes('return Array.isArray(list) && list.length ? list : DEFAULT_SETTINGS.funnelStages;'), 'the saved list, else the old column, else the app\'s own');
     order(s, 'const stale = sent.checked', "const heldStages = 'funnelStages' in data ? funnelStagesOf(existing[0]) : null;", 'const badStages = heldStages ? stagesRefused(data.funnelStages, heldStages) : null;',
         'if (badStages) return { statusCode: badStages.status, headers, body: JSON.stringify({ error: badStages.error, field: badStages.field }) };', 'if (heldStages) data.funnelStages = stagesToStore(data.funnelStages, heldStages);',
         'const goneStages = heldStages ? removedStages(data.funnelStages, heldStages) : [];', 'if (goneStages.length) {', '.where(and(eq(opportunities.orgId, orgId), inArray(opportunities.stage, goneStages)));', 'const held = stagesInUseWords(goneStages, dealsByStage(rows));',

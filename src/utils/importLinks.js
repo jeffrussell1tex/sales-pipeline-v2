@@ -29,6 +29,7 @@ import { unarchived, isMergeArchived, survivorOf, parentLabel, resolveLink, site
 import { parentProblem, parentRefusal, rankOf } from './accountParent.js';
 import { dealKeeps } from './dealAccount.js';
 import { stageToStore } from './stages.js';
+import { probabilityOfCell, cellRefused } from './dealProbability.js';
 
 const TIERS = ['account', 'business_unit', 'site'];
 const TIER_WORDS = { account: 'an account', business_unit: 'a business unit', site: 'a site' };
@@ -488,6 +489,8 @@ export function planDealImport(records, rowNumbers, accounts, deals, stages = nu
         if (s.refused) refuse(i, 'Stage', rec.stage, `${quoted(String(rec.stage).trim())} is not one of your organization's stages — ${stages.map(quoted).join(', ')}.`);
         else if (s.stage) stageOf.set(i, s.stage);
     });
+    // Each row's Probability, a whole number from 0 to 100 or none (state §0.300): a "0", a "0.5" or a word became none.
+    rows.forEach((rec, i) => { if (!refused.has(i) && probabilityOfCell(rec?.probability).refused) refuse(i, 'Probability', rec.probability, cellRefused(rec.probability)); });
     // 3. Two rows of the file on one deal: both refused. 4. Two new rows of one name on one account: both refused (Q13).
     refuseGroups(groupBy([...existingOf.keys()], (i) => existingOf.get(i).id), refuse, 'Opportunity Name', nameOf,
         (idx, i) => `${capital(rowsNamed(idx.map(rowOf)))} ${idx.length === 2 ? 'both' : 'all'} match the deal ${quoted(dealName(existingOf.get(i)))} — keep one of them.`);

@@ -34,6 +34,7 @@
 
 import { parseDaysInStage, backdate } from './stageClock.js';
 import { toLocalDay } from './dateLocal.js';
+import { probabilityOfCell } from './dealProbability.js';
 
 // Coercions, keyed by column. Applied ONLY to keys the caller actually supplied —
 // `mapCsvRows` omits unmapped fields, and that omission has to survive this step
@@ -62,7 +63,7 @@ const CSV_COLUMNS = {
     nextSteps:          (v) => v || '',
     territory:          (v) => v || '',
     vertical:           (v) => v || '',
-    probability:        (v) => parseInt(v, 10) || null,
+    probability:        (v) => probabilityOfCell(v).value ?? null,   // refused at Preview when it is none of these (state §0.300)
     createdDate:        csvDay,
     // Transport only. On an OVERWRITE it is passed through for the server to
     // resolve against the deal's prior stage. On a CREATE there is no prior

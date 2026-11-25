@@ -171,7 +171,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                         </div>
                         <div style={{ padding:'12px 14px', background:'rgba(77,107,61,0.08)', borderTop:`1px solid ${T.border}` }}>
                             <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.55, fontFamily:T.sans }}>
-                                <b style={{ color:T.ink }}>Forecast math.</b> A deal whose stage is changed in its window takes that stage's default, unless the rep set their own. Weighted pipeline is each deal's revenue times its own probability.
+                                <b style={{ color:T.ink }}>Forecast math.</b> A deal moved to a stage, on the board or in its window, takes that stage's default unless the rep set their own; a deal won or lost takes the close's. Weighted pipeline is each deal's revenue times its probability — its stage's default where it has none.
                             </div>
                         </div>
                     </div>

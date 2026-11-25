@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { readList } from '../utils/listLoads.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg, stopped, NETWORK_ERROR } from '../utils/storage';
 import { sentBody, shownRow } from '../utils/leaveOut.js';
+import { leaveOut, LEFT_OUT } from '../utils/leaveOut.js';   // what an untouched stage takes with it (state §0.300)
 import { dealBody } from '../utils/dealNotes.js';
 import { failureWords, heardRefusal, landedBefore, maybeSaid, writeRefusal } from '../utils/refusalWords.js';
 
@@ -47,9 +48,7 @@ export function useOpportunities(deps) {
                         ...opp,
                         arr: parseFloat(opp.arr) || 0,
                         implementationCost: parseFloat(opp.implementationCost) || 0,
-                        probability: opp.probability !== undefined && opp.probability !== ''
-                            ? parseFloat(opp.probability)
-                            : opp.probability,
+                        probability: opp.probability ?? null,   // none is none (state §0.300): parseFloat(null) is NaN
                     };
                     if (!normalized.closeQuarter && normalized.forecastedCloseDate) {
                         const quarter = getQuarter(normalized.forecastedCloseDate);
@@ -111,14 +110,16 @@ export function useOpportunities(deps) {
                         setShowModal, setLostReasonModal) => {
         const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
         const prevOpp = editingOpp ? opportunities.find(o => o.id === editingOpp.id) : null;
-        const stageChanged = prevOpp && prevOpp.stage !== formData.stage;
+        // A stage nobody pressed is left out of an edit (state §0.300): what follows a stage follows the one sent.
+        const stageSent = !(editingOpp && editingOpp.id) || 'stage' in sentBody(formData);
+        const stageChanged = stageSent && prevOpp && prevOpp.stage !== formData.stage;
 
         const stageHistoryEntry = stageChanged ? {
             stage: formData.stage, date: today, prevStage: prevOpp.stage,
             author: currentUser || '', timestamp: new Date().toISOString()
         } : null;
 
-        const enrichedData = {
+        const enriched = {
             ...formData,
             // The member's day, for a close-date move the server records (state §0.239) — read only when the save
             // sends the close date, within a day of the server's.
@@ -143,8 +144,11 @@ export function useOpportunities(deps) {
                 ? (!prevOpp ? (formData.wonDate || today) : prevOpp.stage === 'Closed Won' ? (prevOpp.wonDate || '') : today)
                 : '',
         };
+        // Nor are the won date and the loss's facts sent without it: worked out from this window's copy of the stage, they
+        // emptied those of a deal closed elsewhere since.
+        const enrichedData = stageSent ? enriched : leaveOut(enriched, [...(formData[LEFT_OUT] || []), 'wonDate', 'lostReason', 'lostCategory', 'lostDate']);
 
-        if (formData.stage === 'Closed Lost' && (!prevOpp || prevOpp.stage !== 'Closed Lost')) {
+        if (stageSent && formData.stage === 'Closed Lost' && (!prevOpp || prevOpp.stage !== 'Closed Lost')) {
             setOppModalError(null); setOppModalSaving(false);   // the deal window closes clean, as its onClose does
             setShowModal(false);
             // A new deal is given its id once, here: the dialog's retry sends the same
@@ -176,8 +180,9 @@ export function useOpportunities(deps) {
                     // SPIFF: offer a claim on any Closed Won save that still has
                     // an unclaimed active SPIFF. deps.onDealWon no-ops when there
                     // is nothing to claim.
-                    if (enrichedData.stage === 'Closed Won') {
-                        deps.onDealWon?.({ ...updatedOpp, id: editingOpp.id });
+                    const landed = data.opportunity || shownRow(updatedOpp);   // the deal as stored: its stage, not this window's copy (state §0.300)
+                    if (landed.stage === 'Closed Won') {
+                        deps.onDealWon?.({ ...landed, id: editingOpp.id });
                     }
                     // SMS: stage changed
                     if (stageChanged && enrichedData.salesRep) {

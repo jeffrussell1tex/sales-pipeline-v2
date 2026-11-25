@@ -12,6 +12,7 @@ import { pressNoticeOf } from '../utils/pressNotice.js';
 import { T } from '../tokens.js';
 import { todayLocal, calendarDays } from '../utils/dateLocal';
 import { quoteReader } from '../utils/stages.js';
+import { probabilityText, countedProbability } from '../utils/dealProbability.js';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
 import { esc } from '../utils/customerNotifications';
 // Quote → job (state §0.149): which quotes can be accepted, which become work.
@@ -2075,7 +2076,7 @@ export default function QuotesTab() {
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: `1px solid ${T.border}` }}>
                                                 <div>
                                                     <div style={{ fontSize: 16, fontWeight: 600, color: T.ink, letterSpacing: -0.3, fontFamily: T.sans }}>{fmt(opp.arr)}</div>
-                                                    <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>Revenue · {opp.probability || 0}% probability</div>
+                                                    <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>Revenue · {probabilityText(countedProbability(opp, settings?.funnelStages))} probability</div>
                                                 </div>
                                                 {canEdit && <button style={{ background: T.ink, color: T.surface, border: 'none', padding: '6px 12px', fontSize: 11.5, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Start quote →</button>}
                                             </div>

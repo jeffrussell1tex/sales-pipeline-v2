@@ -146,7 +146,8 @@ test('updateFieldPatch: an allowlist (18b34) — never orgId, ownerId, stage or 
     assert.deepEqual(Object.keys(UPDATABLE_OPPORTUNITY_FIELDS).sort(), ['forecastCategory', 'nextSteps', 'probability', 'team', 'territory', 'vertical']);
     assert.deepEqual(updateFieldPatch({ entity: 'opportunity', field: 'forecastCategory', value: ' Commit ' }), { ok: true, field: 'forecastCategory', value: 'Commit' });
     assert.deepEqual(updateFieldPatch({ entity: 'opportunity', field: 'nextSteps', value: '' }), { ok: true, field: 'nextSteps', value: null });
-    assert.deepEqual(updateFieldPatch({ entity: 'opportunity', field: 'probability', value: '75.4' }), { ok: true, field: 'probability', value: 75 });
+    assert.deepEqual(updateFieldPatch({ entity: 'opportunity', field: 'probability', value: '75' }), { ok: true, field: 'probability', value: 75 });
+    assert.equal(updateFieldPatch({ entity: 'opportunity', field: 'probability', value: '75.4' }).ok, false, 'a fraction is refused, as its words say — never rounded (§0.300)');
     for (const bad of ['orgId', 'org_id', 'ownerId', 'salesRep', 'stage', 'arr', 'id', 'stageHistory', '', undefined]) {
         const r = updateFieldPatch({ entity: 'opportunity', field: bad, value: 'x' });
         assert.equal(r.ok, false, `${bad} is refused`);

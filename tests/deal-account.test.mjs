@@ -641,7 +641,7 @@ test("H4: the Kanban's stage drag sends the stage and its date — never the who
     assert.ok(!drop.includes('body: JSON.stringify(newOpp)'), 'REGRESSION: the whole row');
     assert.ok(!drop.includes('stageHistory: newOpp.stageHistory'), 'REGRESSION (§0.236): the board sends its own copy of the history');
     const changed = between(drop, 'const newOpp = {\n            ...updatedOpp,\n', '        };');
-    assert.deepEqual([...changed.matchAll(/^            (\w+):/gm)].map((x) => x[1]), ['stage', 'stageChangedDate', 'stageHistory'], 'what the drag shows at once: the stage, its date, the move — sent: the first two');
+    assert.deepEqual([...changed.matchAll(/^            (\w+):/gm)].map((x) => x[1]), ['stage', 'probability', 'stageChangedDate', 'stageHistory'], 'what the drag shows at once: the stage, its probability (§0.300), its date, the move — sent: the stage and its date');
     assert.ok(drop.includes('if (stored) setOpportunities(prev => prev.map(o => (o.id === stored.id ? stored : o)));'), 'the deal as stored, from the answer');
 });
 

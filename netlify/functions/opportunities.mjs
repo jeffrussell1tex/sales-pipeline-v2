@@ -34,6 +34,7 @@ import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
 import { bulkAccountLinks, dealLinkDecided, dealLinkAsks } from '../../src/utils/dealAccount.js';
 import { searchKey } from '../../src/utils/searchMatch.js';
 import { checkLinks, checkBulkLinks, defaultPipelineIn, checkStages } from './_links.mjs';
+import { decideProbabilities, probabilityAfterMove } from '../../src/utils/dealProbability.js';
 // A deal's score, kept on the deal by the server after each write that can move it (AI scoring batch 2A).
 import { rescoreDeals, withDealScore } from './_dealScore.mjs';
 
@@ -373,6 +374,9 @@ export const handler = async (event) => {
                 const inStages = await checkStages(people.rows, orgId, { create: true });   // each row's stage, one of the org's (state §0.299)
                 if (inStages.error) return { statusCode: inStages.status, headers, body: JSON.stringify({ error: inStages.error, field: inStages.field, ids: inStages.ids }) };
                 people.rows = inStages.rows;
+                const likely = decideProbabilities(people.rows);   // each row's probability, a whole 0-100 or none (state §0.300)
+                if (likely.error) return { statusCode: likely.status, headers, body: JSON.stringify({ error: likely.error, field: likely.field, ids: likely.ids }) };
+                people.rows = likely.rows;
                 // A deal naming no Sales Rep with an ownerId is that member's, by id (Q11, state §0.216 — importerOwners, _lib.mjs).
                 const importer = await importerOwners(people.rows, orgId, 'opportunity');
                 if (importer.error) return { statusCode: importer.status, headers, body: JSON.stringify({ error: importer.error, field: importer.field, ids: importer.ids }) };
@@ -407,6 +411,9 @@ export const handler = async (event) => {
             const inStage = await checkStages([data], orgId, { create: true });   // its stage, one of the org's (state §0.299)
             if (inStage.error) return { statusCode: inStage.status, headers, body: JSON.stringify({ error: inStage.error, field: inStage.field }) };
             data.stage = inStage.rows[0].stage;
+            const likely = decideProbabilities([data]);   // its probability, a whole 0-100 or none (state §0.300)
+            if (likely.error) return { statusCode: likely.status, headers, body: JSON.stringify({ error: likely.error, field: likely.field }) };
+            data.probability = likely.rows[0].probability ?? null;
             const named = { ...data, ...people.set };
             const dated = { ...named, createdDate: createdDayOf(named) };
             const newRow = await stampOwnerId(sanitize(link.id ? { ...dated, account: link.name, accountId: link.id } : dated), 'opportunity', { clerkUserId: userId, orgId });
@@ -518,6 +525,10 @@ export const handler = async (event) => {
                 const inStages = await checkStages(data, orgId, { priors, mayAsk: mayName });
                 if (inStages.error) return { statusCode: inStages.status, headers, body: JSON.stringify({ error: inStages.error, field: inStages.field, ids: inStages.ids }) };
                 data.splice(0, data.length, ...inStages.rows);
+                // Each probability a row names anew, a whole 0-100 or none (state §0.300); refused as the stages are.
+                const likely = decideProbabilities(data, { priors, mayAsk: mayName });
+                if (likely.error) return { statusCode: likely.status, headers, body: JSON.stringify({ error: likely.error, field: likely.field, ids: likely.ids }) };
+                data.splice(0, data.length, ...likely.rows);
                 // Each row's account by the single save's rule (bulkDealLinks, above); one a deal already holds is not
                 // asked again. Only a deal the caller may save is asked: one she may not is answered forbidden by
                 // bulkUpsert whatever it names, so a refusal never tells her of an account she can't open.
@@ -684,6 +695,10 @@ export const handler = async (event) => {
             const inStage = await checkStages([data], orgId, { priors: new Map([[data.id, existing]]) });
             if (inStage.error) return { statusCode: inStage.status, headers, body: JSON.stringify({ error: inStage.error, field: inStage.field }) };
             if ('stage' in inStage.rows[0]) data.stage = inStage.rows[0].stage; else delete data.stage;
+            // Its probability (state §0.300): a whole 0-100 or none; what the deal holds is never asked again.
+            const likely = decideProbabilities([data], { priors: new Map([[data.id, existing]]) });
+            if (likely.error) return { statusCode: likely.status, headers, body: JSON.stringify({ error: likely.error, field: likely.field }) };
+            if (likely.rows[0].probability !== undefined) data.probability = likely.rows[0].probability; else delete data.probability;
             const me = await resolveCaller(userId, orgId);
             const now = new Date().toISOString();
             const serverDay = now.slice(0, 10);
@@ -735,6 +750,9 @@ export const handler = async (event) => {
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'opportunity', orgId, stored: existing });
             if (ownPut.change) clean.ownerId = ownPut.ownerId;
             if (move) { clean.stageChangedDate = move.date; clean.stageHistory = [...notesOf(existing.stageHistory), move]; }
+            // A move that names no probability takes the new stage's default where the deal stood on the old one's, or on none
+            // (state §0.300) — the board's, as the deal window's: a won deal dragged there read the old stage's.
+            if (move && !('probability' in data)) clean.probability = probabilityAfterMove(existing, move.stage, inStage.funnelStages);
             // The won date follows the stage (state §0.240; the review): a move into Closed Won is dated by the move unless
             // the save names a real day of its own (not the one stored — a window's copy of an earlier win); a move out of
             // Closed Won clears it, so a deal reopened on the board and won again is never dated by its first win.

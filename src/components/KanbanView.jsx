@@ -6,6 +6,7 @@ import { maybeSaid } from '../utils/refusalWords.js';
 import { T } from '../tokens.js';
 import { todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
 import { stagesDrawn } from '../utils/stages.js';
+import { probabilityAfterMove } from '../utils/dealProbability.js';
 
 // ── Tokens — exact match to TOKENS in mockup ─────────────────
 
@@ -186,7 +187,7 @@ export default function KanbanView({
     selectMode = false,
     canEdit = false,   // canEditCrm(userRole), PipelineTab's: only a member who may change deals is offered the drag (§0.245, Q2)
 }) {
-    const { stages, opportunities, setOpportunities, currentUser, activities, promptSpiffClaim, setPressNotices } = useApp();
+    const { stages, settings, opportunities, setOpportunities, currentUser, activities, promptSpiffClaim, setPressNotices } = useApp();
 
     const handleKanbanDrop = (toStage) => {
         if (!kanbanDragging || kanbanDragging.fromStage === toStage) {
@@ -198,6 +199,7 @@ export default function KanbanView({
         const newOpp = {
             ...updatedOpp,
             stage: toStage,
+            probability: probabilityAfterMove(updatedOpp, toStage, settings?.funnelStages),   // as the server's move has it (state §0.300)
             stageChangedDate: today,
             stageHistory: [
                 ...(updatedOpp.stageHistory || []),

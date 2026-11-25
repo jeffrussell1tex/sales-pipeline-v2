@@ -10,6 +10,7 @@ import { useApp } from '../../../AppContext';
 // keys are the engine's own (state §0.124): a trigger offered here is one the
 // engine fires, and a condition names a field the event actually has.
 import { AUTOMATION_TRIGGERS, TRIGGER_GROUPS, HOURLY_TRIGGERS, UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf, assigneeOptions, assigneeParams } from '../../../utils/automationEvents.js';
+import { updateFieldPatch } from '../../../utils/automationEvents.js';
 
 const ACTION_TYPES = [
     { value:'create_task',  label:'Create task',       icon:'✅' },
@@ -173,6 +174,8 @@ const AutomationModal = ({ rule, onClose, onSaved, heldWords = '', onHeld }) => 
         if (!name.trim()) { setError('Name is required'); return; }
         if (actions.length === 0) { setError('Add at least one action'); return; }
         if (actions.some(a => a.type === 'update_field' && !a.params?.field)) { setError('Update field: choose the field to set'); return; }
+        const unset = actions.filter(a => a.type === 'update_field').map(a => updateFieldPatch(a.params)).find(r => !r.ok);
+        if (unset) { setError(`Update field: ${unset.reason}`); return; }   // the engine's rule, said before it is saved (state §0.300): it skipped the action at every run
         if (actions.some(a => a.type === 'webhook' && !a.params?.url?.trim())) { setError('Fire webhook: an endpoint URL is required'); return; }
         if (actions.some(a => a.type === 'send_slack' && !a.params?.message?.trim())) { setError('Post to Slack: a message is required'); return; }
         setSaving(true); setError('');

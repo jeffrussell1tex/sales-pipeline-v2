@@ -82,7 +82,7 @@ test('WIRING: the single POST refuses after its id check and before any read; th
 test('WIRING: the screens\' creates send the lists empty, or not at all — so the rule refuses none of them', () => {
     const hook = read('src/hooks/useOpportunities.js');
     // A new deal has no stored deal: no move, so no entry, and no notes.
-    assert.ok(hook.includes('const stageChanged = prevOpp && prevOpp.stage !== formData.stage;'), 'a move only from a stored deal');
+    assert.ok(hook.includes('const stageChanged = stageSent && prevOpp && prevOpp.stage !== formData.stage;'), 'a move only from a stored deal');
     assert.ok(hook.includes(': (prevOpp?.stageHistory || []),'), 'the deal window\'s new deal: an empty history');
     assert.ok(hook.includes('comments: prevOpp?.comments || [],'), 'and no notes');
     assert.ok(hook.includes('comments: prevOppRef?.comments || formData.comments || [],'), 'the Closed Lost dialog\'s, from the window\'s');

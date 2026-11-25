@@ -4,15 +4,16 @@ import { quarterOf, quarterRange, groupByQuarter, fiscalStartOf } from '../utils
 import { todayLocal, calendarDays } from '../utils/dateLocal';
 import { T } from '../tokens.js';
 import { commitStagesOf } from '../utils/stages.js';
+import { countedProbability } from '../utils/dealProbability.js';
 
 // ── Tokens — exact match to PipelineTab ──────────────────────
 
 const stageColor = (s) => T.stages[s] || T.inkMuted;
 const eyebrow = { fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans };
 
-function qSummary(opps, commitStages) {
+function qSummary(opps, commitStages, funnelStages) {
     const total    = opps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
-    const weighted = opps.reduce((s, o) => s + (parseFloat(o.arr) || 0) * ((parseFloat(o.probability) || 0) / 100), 0);
+    const weighted = opps.reduce((s, o) => s + (parseFloat(o.arr) || 0) * ((countedProbability(o, funnelStages) ?? 0) / 100), 0);
     const commit   = opps.filter(o => commitStages.includes(o.stage)).reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
     return { total, weighted, commit, count: opps.length };
 }
@@ -189,7 +190,7 @@ function TableRow({ opp, canSeeAll, dealScoreOf, onEdit, selectMode, isSelected,
 }
 
 // ── Quarter rail ──────────────────────────────────────────────
-function QuarterRail({ commitStages, groups, activeKey, onSelect, totalAll, currentKey, fiscalStart }) {
+function QuarterRail({ commitStages, funnelStages, groups, activeKey, onSelect, totalAll, currentKey, fiscalStart }) {
     return (
         <div style={{
             width: 220,
@@ -206,7 +207,7 @@ function QuarterRail({ commitStages, groups, activeKey, onSelect, totalAll, curr
             <div style={{ ...eyebrow, padding: '6px 10px 8px' }}>Quarters</div>
 
             {groups.map(g => {
-                const s       = qSummary(g.opps, commitStages);
+                const s       = qSummary(g.opps, commitStages, funnelStages);
                 const isActive  = g.key === activeKey;
                 const isCurrent = g.key === currentKey;
                 const pct       = totalAll > 0 ? Math.min(100, (s.total / totalAll) * 100) : 0;
@@ -319,6 +320,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode 
     const toggleSelect = (id) => setSelectedOpps && setSelectedOpps(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
     const fiscalStart = fiscalStartOf(settings?.fiscalYearStart);
     const commitStages = commitStagesOf(settings);   // the org's last two open stages (state §0.299)
+    const funnelStages = settings?.funnelStages;
 
     // The tab decides what the list shows. Its "All open" default already
     // excludes closed deals when no stage filter is set; when the Filter popover
@@ -343,7 +345,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode 
     // fall back gracefully. We derive this on every render — no stale state.
     const validKey    = groups.find(g => g.key === activeKey)?.key || groups[0]?.key || null;
     const activeGroup = groups.find(g => g.key === validKey) || null;
-    const sum         = activeGroup ? qSummary(activeGroup.opps, commitStages) : { total: 0, weighted: 0, commit: 0, count: 0 };
+    const sum         = activeGroup ? qSummary(activeGroup.opps, commitStages, funnelStages) : { total: 0, weighted: 0, commit: 0, count: 0 };
     const totalAll    = listOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
 
     // ── Empty state ───────────────────────────────────────────
@@ -361,6 +363,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode 
             {/* Quarter rail */}
             <QuarterRail
                 commitStages={commitStages}
+                funnelStages={settings?.funnelStages}
                 groups={groups}
                 activeKey={validKey}
                 onSelect={setActiveKey}

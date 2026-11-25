@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { orgStages, firstStageOf, reopenStage } from '../../utils/stages.js';
+import { defaultOf, countedProbability, pressedProbability, probabilityText } from '../../utils/dealProbability.js';
 import { parseLocalDate, daysSince } from '../../utils/dateLocal';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
 import { readRefusal, failureWords } from '../../utils/refusalWords.js';
@@ -1142,6 +1143,12 @@ export default function OpportunityModal({
     // it is as it opened — a date nobody touched is never written back over one moved elsewhere since, and an undated
     // deal (which opens on today) stays undated until someone picks a date.
     const closeSeed = useRef(formData.forecastedCloseDate ?? '').current;
+    // An edit sends the stage, and the probability, only once each was pressed or typed here (state §0.300) — back again too, as
+    // the pipeline: a newer one stands, and a move that names no probability takes the server's, from the deal as stored.
+    const stageTouched = useRef(false), probTouched = useRef(false);
+    // Once a save that named the stage went out, the next names the probability too: its answer may have been lost, and the deal
+    // moved by it.
+    const stageWentOut = useRef(false);
     const pipelinePicked = useRef(false);   // an edit sends it only when one is picked here (state §0.297) — the first again too: an answer that proved nothing may have moved it
     const [siteSearch, setSiteSearch]                   = useState(opportunity?.site || '');
     // The Site Name the Account field emptied while its text stopped reading as the account
@@ -1241,13 +1248,10 @@ export default function OpportunityModal({
     // ── Field change handler (fully preserved) ───────────────
     const handleChange = (field, value) => {
         if (validationErrors[field]) setValidationErrors(prev => { const n = {...prev}; delete n[field]; return n; });
+        if (field === 'probability') probTouched.current = true;
         if (field === 'stage') {
-            const stageDefault = (settings?.funnelStages || []).find(s => s?.name === value);
-            const defaultProb = stageDefault ? stageDefault.weight : null;
-            const prevStageDefault = (settings?.funnelStages || []).find(s => s?.name === formData.stage);
-            const prevDefaultProb = prevStageDefault ? prevStageDefault.weight : null;
-            const probIsDefault = formData.probability === null || formData.probability === prevDefaultProb;
-            setFormData({ ...formData, [field]: value, probability: probIsDefault ? defaultProb : formData.probability });
+            stageTouched.current = true;
+            setFormData({ ...formData, [field]: value, probability: pressedProbability(opportunity, formData, probTouched.current || stageWentOut.current, value, settings?.funnelStages) });   // the server's rule for a board move (state §0.300)
         } else {
             setFormData({ ...formData, [field]: value });
         }
@@ -1260,20 +1264,21 @@ export default function OpportunityModal({
     // in useOpportunities.handleSave — unchanged.
     const isClosed = formData.stage === 'Closed Won' || formData.stage === 'Closed Lost';
     const prevOpenStageRef = useRef(null);
-    const prevProbRef = useRef(null);   // its probability then, for a stage with no default (state §0.299)
+    const prevProbRef = useRef(null);   // its probability then (state §0.300)
 
     const setOutcome = (stageName) => {
         if (!isClosed) { prevOpenStageRef.current = formData.stage || null; prevProbRef.current = formData.probability; }
-        const stageDefault = (settings?.funnelStages || []).find(s => s?.name === stageName);
+        stageTouched.current = true;
         // Outcomes force their probability: Won = 100, Lost = 0 (stage default wins if configured)
-        const prob = stageDefault?.weight ?? (stageName === 'Closed Won' ? 100 : 0);
-        setFormData({ ...formData, stage: stageName, probability: prob });
+        setFormData({ ...formData, stage: stageName, probability: pressedProbability(opportunity, formData, probTouched.current || stageWentOut.current, stageName, settings?.funnelStages) });
     };
 
     const reopenDeal = () => {
         const target = reopenStage(stages, { left: prevOpenStageRef.current, held: opportunity?.stage, history: opportunity?.stageHistory });   // one the org has (state §0.299)
-        const stageDefault = (settings?.funnelStages || []).find(s => s?.name === target);
-        setFormData({ ...formData, stage: target, probability: stageDefault?.weight ?? prevProbRef.current ?? formData.probability });
+        stageTouched.current = true;
+        // Reopened where it was closed from in this window: as it was then, a rep's own with it (state §0.300).
+        const back = target === prevOpenStageRef.current ? prevProbRef.current : undefined;
+        setFormData({ ...formData, stage: target, probability: back !== undefined ? back ?? null : pressedProbability(opportunity, formData, probTouched.current || stageWentOut.current, target, settings?.funnelStages) });
     };
 
     // ── Submit handler (fully preserved) ─────────────────────
@@ -1326,8 +1331,11 @@ export default function OpportunityModal({
             ...(sameList(selectedContactIds, linksSeed.contactIds) && (formData.contacts ?? '') === linksSeed.contacts ? ['contactIds', 'contacts'] : []),
             ...((formData.forecastedCloseDate ?? '') === closeSeed ? ['forecastedCloseDate', 'closeQuarter'] : []),
             ...(pipelinePicked.current ? [] : ['pipelineId']),
+            ...(stageTouched.current ? [] : ['stage']),
+            ...(probTouched.current || stageWentOut.current ? [] : ['probability']),
         ];
-        onSave(leaveOut({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id, ...(resolvedAccount.site != null ? { site: resolvedAccount.site } : {}), arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds }, left));
+        if (stageTouched.current) stageWentOut.current = true;
+        onSave(leaveOut({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id, ...(resolvedAccount.site != null ? { site: resolvedAccount.site } : {}), arr: parseFloat(formData.arr) || 0, probability: opportunity?.id && !stageTouched.current ? formData.probability ?? null : countedProbability(formData, settings?.funnelStages), closeQuarter, contactIds: selectedContactIds }, left));
     };
     const handleSubmit = (e) => { e.preventDefault(); saveDeal(); };
 
@@ -1740,20 +1748,20 @@ export default function OpportunityModal({
                                             if (isClosed) {
                                                 const closingEntry = [...(opportunity?.stageHistory || [])].reverse().find(h => h.stage && h.stage.startsWith('Closed'));
                                                 const from = closingEntry?.prevStage || prevOpenStageRef.current;
-                                                const prob = formData.probability != null ? formData.probability : (formData.stage === 'Closed Won' ? 100 : 0);
+                                                const prob = countedProbability(formData, settings?.funnelStages);
                                                 return (
                                                     <div style={{ fontSize: 11.5, color: T.inkMuted, marginTop: 6, fontFamily: T.serif, fontStyle: 'italic' }}>
-                                                        {from ? `Closed from ${from}` : 'Closed'} · {prob}% probability
+                                                        {from ? `Closed from ${from}` : 'Closed'} · {probabilityText(prob)} probability
                                                     </div>
                                                 );
                                             }
-                                            const stageDefault = (settings?.funnelStages || []).find(s => s?.name === formData.stage);
+                                            const stageDefault = defaultOf(settings?.funnelStages, formData.stage);
                                             const timeInStage = opportunity?.stageChangedDate ? daysSince(opportunity.stageChangedDate) : null;
-                                            if (!stageDefault && timeInStage === null) return null;
+                                            if (stageDefault === null && timeInStage === null) return null;
                                             return (
                                                 <div style={{ fontSize: 11.5, color: T.inkMuted, marginTop: 6, fontFamily: T.serif, fontStyle: 'italic' }}>
                                                     {timeInStage !== null ? `${timeInStage} days in ${formData.stage}` : formData.stage}
-                                                    {stageDefault?.weight != null && ` · ${stageDefault.weight}% default probability`}
+                                                    {stageDefault !== null && ` · ${stageDefault}% default probability`}
                                                 </div>
                                             );
                                         })()}
@@ -1903,11 +1911,9 @@ export default function OpportunityModal({
 
                                     {/* ── Probability ── */}
                                     {(() => {
-                                        const stageDefault = (settings?.funnelStages || []).find(s => s?.name === formData.stage);
-                                        const rawWeight = stageDefault ? parseFloat(stageDefault.weight) : NaN;
-                                        const defaultProb = !isNaN(rawWeight) ? rawWeight : null;
-                                        const effectiveProb = (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : defaultProb;
-                                        const isOverridden = formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability) && formData.probability !== defaultProb;
+                                        const defaultProb = defaultOf(settings?.funnelStages, formData.stage);
+                                        const effectiveProb = countedProbability(formData, settings?.funnelStages);
+                                        const isOverridden = (formData.probability ?? null) !== null && formData.probability !== defaultProb;
                                         return (
                                             <div style={{ marginBottom: 16 }}>
                                                 <label style={{ ...fieldLabelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1922,7 +1928,7 @@ export default function OpportunityModal({
                                                         onChange={e => { const val = e.target.value === '' ? null : Math.min(100, Math.max(0, parseInt(e.target.value) || 0)); handleChange('probability', val); }}
                                                         style={{ ...inputStyle(false), flex: 1 }}/>
                                                     {isOverridden && (
-                                                        <GhostBtn type="button" onClick={() => handleChange('probability', defaultProb)}>↺ Reset</GhostBtn>
+                                                        <GhostBtn type="button" onClick={() => handleChange('probability', null)}>↺ Reset</GhostBtn>
                                                     )}
                                                 </div>
                                                 {isOverridden && defaultProb !== null && (

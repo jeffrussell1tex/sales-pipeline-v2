@@ -7,6 +7,7 @@ import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { isoLocal, todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
 import { defaultPipelineOf } from '../utils/pipelines.js';
 import { stagesDrawn, laneReader } from '../utils/stages.js';
+import { countedProbability } from '../utils/dealProbability.js';
 import { openStagesOf, bestCaseFallbackStages } from '../utils/stageOrder.js';
 import KanbanView from '../components/KanbanView';
 import FunnelView from '../components/FunnelView';
@@ -553,10 +554,10 @@ export default function PipelineTab() {
 
     const pipelineTotalARR   = pipelineFilteredOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
     const commitARR          = pipelineFilteredOpps.filter(o => laneOf(o.stage) === 'commit').reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
-    // Weighted Revenue = sum of (arr * probability / 100) across open deals
+    // Weighted Revenue = sum of (arr * probability / 100) across open deals — one with none at its stage's default (state §0.300)
     const weightedARR        = pipelineFilteredOpps
         .filter(o => !['Closed Won','Closed Lost'].includes(o.stage))
-        .reduce((s, o) => s + ((parseFloat(o.arr)||0) * (parseFloat(o.probability)||0) / 100), 0);
+        .reduce((s, o) => s + ((parseFloat(o.arr)||0) * (countedProbability(o, settings?.funnelStages) ?? 0) / 100), 0);
 
 
     // "Score all deals" is gone (AI scoring batch 2B — Jeff, 17 Nov, Q4: "Take it out"): the server scores every deal for
@@ -569,13 +570,13 @@ export default function PipelineTab() {
         const rows = smartFilteredOpps.map(o => {
             const win        = dealScoreOf(o);   // none while Deal scoring is off (AI scoring batch 2A)
             const daysInStage = o.stageChangedDate ? (daysSince(o.stageChangedDate) ?? '') : '';
-            const weightedVal = ((parseFloat(o.arr)||0) * (parseFloat(o.probability)||0) / 100).toFixed(0);
+            const weightedVal = ((parseFloat(o.arr)||0) * (countedProbability(o, settings?.funnelStages) ?? 0) / 100).toFixed(0);
             return [
                 o.opportunityName || o.account,
                 o.account,
                 o.stage,
                 parseFloat(o.arr)||0,
-                (parseFloat(o.probability)||0) + '%',
+                o.probability == null ? '' : o.probability + '%',   // none is none: 0% came back by an import as a 0 (state §0.300)
                 weightedVal,
                 o.forecastedCloseDate || '',
                 o.salesRep || '',

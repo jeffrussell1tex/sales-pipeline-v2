@@ -34,6 +34,7 @@ import { membersOffLists } from '../../src/utils/linkIds.js';
 import { teamNamesOf } from '../../src/utils/teamMembership.js';
 import { pipelinesOf, defaultPipelineOf } from '../../src/utils/pipelines.js';
 import { orgStages, decideStages } from '../../src/utils/stages.js';
+import { DEFAULT_SETTINGS } from '../../src/utils/settingsDefaults.js';
 // The settings row's writes carry revision tokens (state §0.224 — batch 4b-3, step B).
 import { revsMinted } from '../../src/utils/settingsRevs.js';
 import { mintRev, extraPatched } from './_settingsRevs.mjs';
@@ -89,19 +90,21 @@ export const defaultPipelineIn = async (orgId) => defaultPipelineOf(await pipeli
 // The org's deal stages, as every screen draws them (state §0.299): the saved list, else the row's old column, else the app's
 // own — as funnelStagesOf (_dealScore.mjs) reads them; those two fields alone, never the rest of the row. A read that fails
 // throws.
-export async function stagesInOrg(orgId) {
+export async function funnelInOrg(orgId) {
     const [row] = await db.select({ funnelStages: sql`${settings.extra}->'funnelStages'`, stages: settings.stages }).from(settings)
         .where(eq(settings.orgId, orgId));
-    return orgStages({ funnelStages: row?.funnelStages ?? row?.stages });
+    const list = row?.funnelStages ?? row?.stages;
+    return Array.isArray(list) && list.length ? list : DEFAULT_SETTINGS.funnelStages;
 }
 
 // The stage each deal a write sends is in (state §0.299; guide §18b142): one of its org's, in the org's spelling. A create
 // that names none is made in the org's first; a save that names it blank does not name it, and the stage a deal has is
 // never asked again (src/utils/stages.js decideStages). { rows } — the rows to write — or { status, error, field, ids }:
-// every row refused, nothing written. A save that names no stage reads no list.
+// every row refused, nothing written — and the list it was judged by. A save that names no stage reads none.
 export async function checkStages(rows, orgId, how = {}) {
     if (!how.create && !rows.some((r) => r && typeof r === 'object' && 'stage' in r)) return { rows };
-    return decideStages(rows, await stagesInOrg(orgId), how);
+    const funnelStages = await funnelInOrg(orgId);
+    return { ...decideStages(rows, orgStages({ funnelStages }), how), funnelStages };
 }
 
 // The live row each asked id names in this org (linkIds.js's liveIds): every row it reads — the merge walk's

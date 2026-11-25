@@ -83,7 +83,9 @@ const MORE = {
     'lead-requests': [{ method: 'PUT', what: 'decide', body: { id: 'r1', action: 'deny' }, rows: { lead_claim_requests: [{ id: 'r1', orgId: 'org_a', leadId: 'l1', requesterId: 'usr_me', status: 'pending' }], leads: [{ id: 'l1', orgId: 'org_a' }], users: [ME] } }],
     // A create and a settings save naming a pipeline of the org (state §0.297): the matrix's made-up ones are refused before the caller is read.
     settings: [{ method: 'PUT', what: 'pipelines', body: { pipelines: [{ id: 'default', name: 'New Business' }] } }],
-    opportunities: [{ method: 'POST', what: 'its pipeline', body: { id: 'x1', pipelineId: 'default' } }, { method: 'PUT', what: 'bulk overwrite', body: [{ id: 'd1', stage: 'Proposal' }], rows: { opportunities: [DEAL], users: [ME] } }],
+    opportunities: [{ method: 'POST', what: 'its pipeline', body: { id: 'x1', pipelineId: 'default' } }, { method: 'PUT', what: 'bulk overwrite', body: [{ id: 'd1', stage: 'Proposal' }], rows: { opportunities: [DEAL], users: [ME] } },
+        // And naming a probability it takes (state §0.300): the matrix's made-up one is refused before the caller is read.
+        { method: 'PUT', what: 'its probability', body: { id: 'd1', probability: 50 }, rows: { opportunities: [DEAL], users: [ME] } }],
     // Which claims a rep is answered turns on who they are (state §0.298).
     'spiff-claims': [{ method: 'GET', what: 'claims', qs: {}, rows: { spiff_claims: [{ id: 'c1', orgId: 'org_a', opportunityId: 'd1', spiffId: 'sp', repName: ME.name }], opportunities: [DEAL], users: [ME] } }],
     'email-inbound': [{ method: 'GET', what: 'my address', env: { BCC_SECRET: 'test', INBOUND_DOMAIN: 'in.test' }, rows: { users: [ME] } }],

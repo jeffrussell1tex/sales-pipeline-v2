@@ -35,6 +35,7 @@
 //     move a deal into another tenant's workspace.
 
 import { isoLocal } from './dateLocal.js';
+import { probabilityOf, probabilityOfCell } from './dealProbability.js';
 
 const str = (v, max = 500) => (typeof v === 'string' ? v : v == null ? '' : String(v)).trim().slice(0, max);
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
@@ -269,7 +270,7 @@ export const UPDATABLE_OPPORTUNITY_FIELDS = Object.freeze({
 // carried params {} — a typed field, or none, and nothing was written).
 export const UPDATABLE_FIELD_OPTIONS = Object.freeze([
     Object.freeze({ key: 'forecastCategory', label: 'Forecast category' }),
-    Object.freeze({ key: 'probability',      label: 'Probability (0–100)' }),
+    Object.freeze({ key: 'probability',      label: 'Probability (a whole number, 0–100)' }),
     Object.freeze({ key: 'nextSteps',        label: 'Next steps' }),
     Object.freeze({ key: 'vertical',         label: 'Vertical' }),
     Object.freeze({ key: 'territory',        label: 'Territory' }),
@@ -289,9 +290,9 @@ export function updateFieldPatch(params) {
     const kind = Object.prototype.hasOwnProperty.call(UPDATABLE_OPPORTUNITY_FIELDS, field) ? UPDATABLE_OPPORTUNITY_FIELDS[field] : null;
     if (!kind) return { ok: false, reason: `field "${field || '(blank)'}" cannot be set by a rule` };
     if (kind === 'int') {
-        const n = num(p.value);
-        if (n === null || n < 0 || n > 100) return { ok: false, reason: `${field} must be a whole number from 0 to 100` };
-        return { ok: true, field, value: Math.round(n) };
+        const { value } = (typeof p.value === 'string' ? probabilityOfCell : probabilityOf)(p.value);   // the one rule (state §0.300): 50.5 was rounded, a space read as 0
+        if (value == null) return { ok: false, reason: `${field} must be a whole number from 0 to 100` };
+        return { ok: true, field, value };
     }
     const value = str(p.value, 500);
     return { ok: true, field, value: value || null };

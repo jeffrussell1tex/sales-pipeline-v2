@@ -4933,6 +4933,17 @@ THE GUARD: tests/gate-matrix.test.mjs.
 
 THE GUARD: tests/failed-reads.test.mjs (every function as every role, the caller's read rejected; each other read rejected alone); tests/integration/failed-reads.itest.mjs.
 
+## 18b143. A Deal's Probability Is None Or A Whole Number From 0 To 100; An Edit Sends A Stage Or A Probability Only Once Pressed There (hard rule)
+
+**Origin (§0.300, 25 Nov 2026 — OPEN_ITEMS §4.2; Jeff: "Keep working", "yes to your deal with no probability questions").** Any whole number was stored, a fraction was a 500 (but on a bulk create), a file's "0" erased one, a deal with none was NaN on the screen and nothing in the weighted; the window sent its own copy of the stage and the probability back over newer ones on every edit.
+
+1. **One rule, src/utils/dealProbability.js**: `probabilityOf` (a value), `probabilityOfCell` (a file's cell, an automation's text), `decideProbabilities` (a write's rows), `probabilityAfterMove` (a move that names none), `countedProbability` (what a deal counts at and reads). What a deal counts at and reads is `countedProbability`'s, on the deal window, the Pipeline header, List and export, Quotes and Reports' deal report (a sum takes 0 where it answers none); Reports' stage strip and Settings' pages draw the stage's weight itself.
+2. **A move that names no probability takes the stage's** — on the server, from the deal as stored, for a single save; the window shows what that gives from the deal as opened (`pressedProbability`), the board's copy too. A rep's own stands; a close is its own, and what it set — its default now, or 100 and 0 — does not stay on a deal reopened. An import's Overwrite does not (OPEN_ITEMS §4.2).
+3. **A deal with none counts, and reads, at its stage's default** on those screens; a stage with none reads a dash and weighs 0; a file's own column leaves it blank; the public API and the automations read it as stored. A 0 is a 0.
+4. **An edit leaves out the stage and the probability until each was pressed or typed in that window** (or a save naming the stage went out from it: its answer may have been lost), **and with the stage what follows one**: the won date, the loss's reason, category and day, the Lost dialog, the texts. What a landed save offers next reads the deal as answered.
+
+THE GUARD: tests/deal-probability.test.mjs, tests/integration/deal-probability.itest.mjs. Left by it: OPEN_ITEMS §4.2.
+
 ## 18b142. A Deal's Stage Is One Of Its Org's List, And The List Is One (hard rule)
 
 **Origin (§0.299, 25 Nov 2026 — OPEN_ITEMS §4.3; Jeff: "Leave it, keep working").** Three lists of stages were drawn at once: the org's (Settings, the deal window, Reports), one written into the app (the board, the funnel, the filter) and each screen's own names for commit, best case and "need a quote". A stage an Admin added had no column; the server stored any name at all.

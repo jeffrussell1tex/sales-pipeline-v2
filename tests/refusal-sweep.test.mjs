@@ -94,6 +94,7 @@ import { withIfRevs, staleOf, STALE_ERROR } from '../src/utils/settingsRevs.js';
 import { refusalOf, NETWORK_ERROR } from '../src/utils/storage.js';
 import { maybeSettingsError, settingsSaid } from '../src/Tabs/settings/shared/saveSettings.js';
 import { pressNoticeOf } from '../src/utils/pressNotice.js';
+import { probabilityAfterMove } from '../src/utils/dealProbability.js';
 import { taskWriteAnswer } from '../src/utils/taskWrite.js';
 import { sentBody, shownRow } from '../src/utils/leaveOut.js';
 import { withTiers } from '../src/utils/accountParent.js';
@@ -153,7 +154,7 @@ const kanbanDrop = () => builtDrop || (builtDrop = (() => {
     const fn = between(code(read('src/components/KanbanView.jsx')), '    const handleKanbanDrop = (toStage) => {', '\n    };') + '\n    };';
     return new Function('kanbanDragging', 'setKanbanDragging', 'setKanbanDragOver', 'todayLocal', 'opportunities', 'currentUser',
         'setOpportunities', 'requestOrg', 'dbWrite', 'stillOrg', 'setPressNotices', 'pressNoticeOf', 'promptSpiffClaim', 'console',
-        'dragBase', 'maybeSaid', `${fn}\nreturn handleKanbanDrop;`);   // maybeSaid: §0.261
+        'dragBase', 'maybeSaid', 'settings', 'probabilityAfterMove', `${fn}\nreturn handleKanbanDrop;`);   // maybeSaid: §0.261
 })());
 // The module's dragBase (KanbanView.jsx): one map across every drag, as at module scope.
 const DRAG_BASE = new WeakMap();
@@ -167,7 +168,7 @@ const drag = async ({ toStage = 'Proposal', answer, list = [DEAL, OTHER], oppId 
     const drop = kanbanDrop()({ oppId, fromStage: 'Qualification' }, (v) => did.dragging.push(v), (v) => did.dragOver.push(v),
         () => '2026-01-02', list, 'Karen Rep', opps.set, () => 'org_a',
         (url, opts) => { did.sent.push([url, opts.method, JSON.parse(opts.body)]); return answered; },
-        (o) => o === org, notices.set, pressNoticeOf, (d) => did.spiff.push(d), quiet, DRAG_BASE, maybeSaid);
+        (o) => o === org, notices.set, pressNoticeOf, (d) => did.spiff.push(d), quiet, DRAG_BASE, maybeSaid, { funnelStages: [{ name: 'Qualification', weight: 10 }, { name: 'Proposal', weight: 60 }] }, probabilityAfterMove);   // §0.300
     drop(toStage);
     const shown = opps.value;
     if (meanwhile) meanwhile(opps);
@@ -265,7 +266,7 @@ const dragChain = () => {
         let answerWith;
         const answered = new Promise((r) => { answerWith = r; });
         kanbanDrop()({ oppId: 'd1', fromStage }, () => {}, () => {}, () => '2026-01-02', opps.value, 'Karen Rep', opps.set,
-            () => 'org_a', () => answered, (o) => o === 'org_a', notices.set, pressNoticeOf, () => {}, quiet, DRAG_BASE)(toStage);
+            () => 'org_a', () => answered, (o) => o === 'org_a', notices.set, pressNoticeOf, () => {}, quiet, DRAG_BASE, maybeSaid, {}, probabilityAfterMove)(toStage);
         return { answer: async (a) => { answerWith(a); await settle(); } };
     };
     return { opps, notices, drop };
@@ -330,7 +331,7 @@ test('Part 1a/1b/1d: WIRING — the drag writes through dbWrite and says a refus
     assert.ok(drop.includes("dbWrite('/.netlify/functions/opportunities', {") && !drop.includes('dbFetch('), 'dbWrite: never throws, so the catch never puts back a move that landed');
     assert.ok(k.includes("import { dbWrite, requestOrg, stillOrg } from '../utils/storage';"));
     assert.ok(k.includes("import { pressNoticeOf } from '../utils/pressNotice.js';"));
-    assert.ok(k.includes('const { stages, opportunities, setOpportunities, currentUser, activities, promptSpiffClaim, setPressNotices } = useApp();'));
+    assert.ok(k.includes('const { stages, settings, opportunities, setOpportunities, currentUser, activities, promptSpiffClaim, setPressNotices } = useApp();'));
     assert.ok(!k.includes('setTimeout'), 'REGRESSION: a refusal on the board closed on a timer');
     assert.ok(!drop.includes('setUndoToast'), 'never the one-slot toast a later toast replaces (Q1)');
     assert.ok(drop.includes('const today = todayLocal();') && !drop.includes('getFullYear'), '1d: the member\'s day through todayLocal');

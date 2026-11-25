@@ -13,6 +13,7 @@ import { fiscalStartOf } from '../utils/quarters';
 import { escapeHtml as esc, taskDay, linkedToAccount, linkedToContact, contactTouch, monthsSpanned } from '../utils/historyFeed';
 import { productsListOf, contactNamesText } from '../utils/oppText';
 import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openPipelineByRep, closeDayOf, cycleDaysOf, medianOf, closeDayInRange, lastQuarters } from '../utils/pipelineReport';
+import { probabilityText, countedProbability } from '../utils/dealProbability.js';
 import { openStagesOf, stagePalette, commitFallbackStages, bestCaseFallbackStages } from '../utils/stageOrder';
 import { repDeals } from '../utils/repDeals';
 import { isDispatcher, NON_REP_ROLES } from '../utils/roles.js';
@@ -5889,7 +5890,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
 <div class="kpi">
   <div class="kpi-tile"><div class="kpi-label">Amount</div><div class="kpi-val">${amtFmt}</div></div>
   <div class="kpi-tile"><div class="kpi-label">Stage</div><div class="kpi-val">${esc(opp.stage||'—')}</div></div>
-  <div class="kpi-tile"><div class="kpi-label">Probability</div><div class="kpi-val">${opp.probability||0}%</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Probability</div><div class="kpi-val">${probabilityText(countedProbability(opp, settings?.funnelStages))}</div></div>
   <div class="kpi-tile"><div class="kpi-label">Close date</div><div class="kpi-val">${closeDate}</div></div>
   <div class="kpi-tile"><div class="kpi-label">Forecast</div><div class="kpi-val">${esc(opp.forecastCategory||'—')}</div></div>
 </div>
@@ -5897,7 +5898,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
 <div class="footer"><span>Accelerep · Confidential</span><span>Generated ${printDate}</span></div>
 <script>window.onload=function(){ window.print(); }<\/script></body></html>`);
         win.document.close();
-    }, []);
+    }, [settings?.funnelStages]);
 
     const ActionButtons = ({ entityName, entityType, events }) => (
         <div style={{ display:'flex', gap:8 }}>
@@ -6227,7 +6228,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                             {o.account} · {o.opportunityName || o.name || ''}
                                                         </div>
                                                         <div style={{ fontSize:10.5, color:T.inkMuted }}>
-                                                            {o.arr || o.revenue ? `$${(parseFloat(o.arr||o.revenue||0)/1000).toFixed(1)}k` : ''} · {o.stage} · {o.probability ? o.probability+'%' : ''}
+                                                            {o.arr || o.revenue ? `$${(parseFloat(o.arr||o.revenue||0)/1000).toFixed(1)}k` : ''} · {o.stage} · {probabilityText(countedProbability(o, settings?.funnelStages))}
                                                         </div>
                                                     </div>
                                                     {o.id === selectedOppId && <span style={{ color:T.goldInk, fontSize:11, fontWeight:700 }}>✓</span>}
@@ -6347,7 +6348,6 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                 {/* ── Section 2: Opportunity KPI strip ── */}
                                 {(() => {
                                     const amt = parseFloat(selectedOpp.arr||selectedOpp.revenue||0)||0;
-                                    const prob = parseFloat(selectedOpp.probability||0)||0;
                                     const stage = selectedOpp.stage || '—';
                                     // FIX 4: use forecastedCloseDate || closeDate, same pattern as rest of codebase
                                     const rawCloseDate = selectedOpp.forecastedCloseDate || selectedOpp.closeDate || '';
@@ -6400,7 +6400,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                         { label:'Amount', value: amt >= 1000 ? `$${(amt/1000).toFixed(1)}k` : `$${Math.round(amt)}`, sub: null, serif:true, tone:T.ok },
                                                         { label:'Stage', value: stage, sub: null, serif:true },
                                                         { label:'Days in stage', value: daysInStage != null ? `${daysInStage}d` : '—', sub: null, mono:true, tone: daysInStage > 30 ? T.warn : undefined },
-                                                        { label:'Probability', value: `${prob}%`, sub: null, mono:true },
+                                                        { label:'Probability', value: probabilityText(countedProbability(selectedOpp, settings?.funnelStages)), sub: null, mono:true },
                                                         { label:'Close date', value: closeDate, sub: null },
                                                         // FIX 2+3: Age in pipeline — no Pipeline tile
                                                     ].map((kpi,i) => (
