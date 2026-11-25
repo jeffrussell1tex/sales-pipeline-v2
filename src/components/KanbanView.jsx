@@ -5,6 +5,7 @@ import { pressNoticeOf } from '../utils/pressNotice.js';
 import { maybeSaid } from '../utils/refusalWords.js';
 import { T } from '../tokens.js';
 import { todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
+import { stagesDrawn } from '../utils/stages.js';
 
 // ── Tokens — exact match to TOKENS in mockup ─────────────────
 
@@ -253,8 +254,9 @@ export default function KanbanView({
         );
     };
 
-    // Mockup uses specific visible stages, excluding Closed Lost
-    const visibleStages = stages.filter(s => s !== 'Closed Lost');
+    // A column for each of the org's stages but Closed Lost, and for any other stage a deal here is in: a deal in a stage
+    // off the list written into the app had no column (state §0.299).
+    const visibleStages = stagesDrawn(stages, pipelineFilteredOpps).filter(s => s !== 'Closed Lost');
 
     return (
         // Matches PV1Kanban layout exactly: flex row, gap 10, padding 0 24px 24px, overflowX auto
@@ -275,11 +277,11 @@ export default function KanbanView({
                 return (
                     <div
                         key={stage}
-                        onDragOver={e => { e.preventDefault(); setKanbanDragOver(stage); }}
+                        onDragOver={e => { if (!stages.includes(stage)) return; e.preventDefault(); setKanbanDragOver(stage); }}   // a stage off the org's list is drawn, never dropped on (§0.299)
                         onDragLeave={() => setKanbanDragOver(null)}
-                        onDrop={() => handleKanbanDrop(stage)}
-                        onTouchMove={e => { e.preventDefault(); setKanbanDragOver(stage); }}
-                        onTouchEnd={() => handleKanbanDrop(stage)}
+                        onDrop={() => { if (stages.includes(stage)) handleKanbanDrop(stage); }}
+                        onTouchMove={e => { if (!stages.includes(stage)) return; e.preventDefault(); setKanbanDragOver(stage); }}
+                        onTouchEnd={() => { if (stages.includes(stage)) handleKanbanDrop(stage); }}
                         style={{ width: 200, flexShrink: 0 }}>
 
                         {/* Lane header — from PV1Kanban in mockup */}

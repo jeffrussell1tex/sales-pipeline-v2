@@ -28,6 +28,8 @@ import { teamNameRefused, teamRenames } from '../../src/utils/teamMembership.js'
 import { aiSettingsRefused } from '../../src/utils/aiModels.js';
 import { pipelinesRefused, removedPipelines, inUseWords } from '../../src/utils/pipelines.js';
 import { isOpenDeal } from '../../src/utils/contactDeals.js';
+import { stagesRefused, stagesToStore, removedStages, dealsByStage, stagesInUseWords } from '../../src/utils/stages.js';
+import { funnelStagesOf } from './_dealScore.mjs';
 // The org's default tax rate a save names (state §0.242): a percent, checked by the quote money's one rule.
 import { percentRefused } from '../../src/utils/quoteTotals.js';
 import { sql } from 'drizzle-orm';
@@ -380,6 +382,20 @@ const handle = async (event, retry) => {
                 for (const d of named) if (isOpenDeal(d)) open[d.pipelineId] = (open[d.pipelineId] || 0) + 1;
                 const held = inUseWords(gonePipes, open);
                 if (held) return { statusCode: 409, headers, body: JSON.stringify({ error: held, code: 'inUse', field: 'pipelines' }) };
+            }
+            // The deal stages (state §0.299): names of their own, the two closes and an open one among them, each weight 0 to 100; and
+            // none dropped or renamed while a deal of this org is in it — open or closed, a stage has no other to count in —
+            // judged by the list as it stands, the old column's or the app's own where none was saved.
+            const heldStages = 'funnelStages' in data ? funnelStagesOf(existing[0]) : null;
+            const badStages = heldStages ? stagesRefused(data.funnelStages, heldStages) : null;
+            if (badStages) return { statusCode: badStages.status, headers, body: JSON.stringify({ error: badStages.error, field: badStages.field }) };
+            if (heldStages) data.funnelStages = stagesToStore(data.funnelStages, heldStages);
+            const goneStages = heldStages ? removedStages(data.funnelStages, heldStages) : [];
+            if (goneStages.length) {
+                const rows = await db.select({ stage: opportunities.stage }).from(opportunities)
+                    .where(and(eq(opportunities.orgId, orgId), inArray(opportunities.stage, goneStages)));
+                const held = stagesInUseWords(goneStages, dealsByStage(rows));
+                if (held) return { statusCode: 409, headers, body: JSON.stringify({ error: held, code: 'inUse', field: 'funnelStages' }) };
             }
             const linked = await checkSettingsLinks(data, existingExtra, orgId);
             if (linked.status) return { statusCode: linked.status, headers, body: JSON.stringify({ error: linked.error, field: linked.field }) };

@@ -11,6 +11,7 @@ import { readRefusal, refusalWords, failureWords, heardRefusal, maybeSaid } from
 import { pressNoticeOf } from '../utils/pressNotice.js';
 import { T } from '../tokens.js';
 import { todayLocal, calendarDays } from '../utils/dateLocal';
+import { quoteReader } from '../utils/stages.js';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
 import { esc } from '../utils/customerNotifications';
 // Quote → job (state §0.149): which quotes can be accepted, which become work.
@@ -1628,10 +1629,12 @@ export default function QuotesTab() {
     }, [visibleQuotes, opportunities]);
 
     const quotedOppIds = useMemo(() => new Set(visibleQuotes.map(q => q.opportunityId)), [visibleQuotes]);
+    // Any open stage past the org's first (state §0.299): a list written here named two stages no deal is in, and left out three.
+    const toQuote = useMemo(() => quoteReader(settings), [settings?.funnelStages]);   // eslint-disable-line react-hooks/exhaustive-deps
     const needsQuote   = useMemo(() => (opportunities || [])
-        .filter(o => ['Discovery', 'Proposal', 'Negotiation', 'Closing'].includes(o.stage) && !quotedOppIds.has(o.id))
+        .filter(o => toQuote(o.stage) && !quotedOppIds.has(o.id))
         .sort((a, b) => new Date(a.forecastedCloseDate || '9999') - new Date(b.forecastedCloseDate || '9999')),
-    [opportunities, quotedOppIds]);
+    [opportunities, quotedOppIds, toQuote]);
 
     // ── Configurator state ────────────────────────────────────
     const configuratorOpp    = configuratorOppId ? (opportunities || []).find(o => o.id === configuratorOppId) : null;

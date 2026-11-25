@@ -287,10 +287,10 @@ test("F2: a NEW id of an account merged into another links the account it was me
         assert.equal(r.status, 404, `${why}: ${JSON.stringify(r.body)}`);
         assert.equal(r.body.error, NOT_IN_ORG, 'the answer a missing id gets');
     }
-    const held = await call(A, 'PUT', { id: ID('d_oil'), accountId: ID('to_site'), stage: 'Negotiation' });
+    const held = await call(A, 'PUT', { id: ID('d_oil'), accountId: ID('to_site'), stage: 'Negotiation/Review' });
     assert.equal(held.status, 200, `merged into a site whose account the deal holds: the link as stored (G2, D22) — ${JSON.stringify(held.body)}`);
     row = await rowOf(ID('d_oil'));
-    assert.deepEqual([row.accountId, row.account, row.stage], [SHELL, 'Shell', 'Negotiation'], 'nothing changed by the refusals, and the untouched save stood');
+    assert.deepEqual([row.accountId, row.account, row.stage], [SHELL, 'Shell', 'Negotiation/Review'], 'nothing changed by the refusals, and the untouched save stood');
     const ineos = await call(A, 'POST', { id: ID('d_ineos'), opportunityName: 'Ineos', accountId: INEOS });
     assert.equal(ineos.status, 201);
     const site = await call(A, 'PUT', { id: ID('d_ineos'), accountId: ID('to_site') });
@@ -327,7 +327,7 @@ test("G2: a screen loaded before a merge sends the merged-away id, and the walk 
     assert.equal(r.status, 200, JSON.stringify(r.body));
     row = await rowOf(G('d1'));
     assert.deepEqual([row.accountId, row.account, row.site, row.stage], [SHELL, 'Shell', 'G2 Port Site', 'Proposal'], 'the stage moved; the link and its Site Name as stored');
-    r = await call(B, 'PUT', { id: G('d1'), accountId: G('unit'), stage: 'Negotiation' });
+    r = await call(B, 'PUT', { id: G('d1'), accountId: G('unit'), stage: 'Negotiation/Review' });
     assert.equal(r.status, 404, "org B's stale save of A's deal: not found in B");
     assert.deepEqual([(await rowOf(G('d1'))).stage, (await rowOf(G('d1'))).orgId], ['Proposal', A], "A's deal unchanged");
     r = await call(B, 'PUT', { id: G('b_d1'), opportunityName: 'G2 B Deal', account: 'G2 Port Unit', accountId: G('unit'), site: null, stage: 'Proposal' });
@@ -404,9 +404,9 @@ test("H4: a list loaded before a D22 lift by name — the Kanban's drag (the sta
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(await now(), [SHELL, 'Shell', 'H4 Port Allen Site', 'Proposal'], 'the lift kept');
     // the whole row a stale list sends: no id, the old name, no Site Name
-    r = await call(A, 'PUT', dealBody({ ...loaded, createdAt: undefined, updatedAt: undefined, stage: 'Negotiation', contactIds: [] }));   // as a window sends it since §0.236
+    r = await call(A, 'PUT', dealBody({ ...loaded, createdAt: undefined, updatedAt: undefined, stage: 'Negotiation/Review', contactIds: [] }));   // as a window sends it since §0.236
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.deepEqual(await now(), [SHELL, 'Shell', 'H4 Port Allen Site', 'Negotiation'], 'no id sent while the deal holds one: the link, its name and its Site Name kept; the stage saved');
+    assert.deepEqual(await now(), [SHELL, 'Shell', 'H4 Port Allen Site', 'Negotiation/Review'], 'no id sent while the deal holds one: the link, its name and its Site Name kept; the stage saved');
     for (const empty of ['', null]) {
         r = await call(A, 'PUT', { id: H('d'), accountId: empty, account: 'Something Else', site: 'Elsewhere' });
         assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -449,7 +449,7 @@ test("H5: a stale screen's walk that ends on a site whose name the deal's Site N
     const m = await mergeFn(ev(A, 'POST', { entityType: 'account', survivorId: Q('dock'), archivedId: Q('unit') }));
     assert.equal(m.statusCode, 200, m.body);
     const now = async () => { const x = await rowOf(Q('d')); return [x.accountId, x.account, x.site, x.stage]; };
-    assert.deepEqual(await now(), [SHELL, 'Shell', 'H5 Dock', 'Discovery'], 'D22: up to Shell, Site Name the dock');
+    assert.deepEqual(await now(), [SHELL, 'Shell', 'H5 Dock', 'Qualification'], 'D22: up to Shell, Site Name the dock');
     // another session moves the dock to Dow: still a site (D21), no deal moved (D22 moves deals only from what a move makes a site)
     await db.update(accounts).set({ parentAccountId: Q('dow') }).where(eq(accounts.id, Q('dock')));
     // a screen loaded before the merge drags the deal: its old id walks to the dock, under Dow now

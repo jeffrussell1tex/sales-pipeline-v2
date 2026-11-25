@@ -10,6 +10,9 @@ const named = (ownerId) => ({ [MINE]: 'Rae Crm2', [OTHERS]: 'Olive Crm2' }[owner
 
 const lead = (ownerId) => ({ users, leads: [{ id: 'x1', orgId: 'org_a', firstName: 'Pat', lastName: 'Lee', company: 'Acme', status: 'New', score: 50, ownerId, assignedTo: named(ownerId) }] });
 const deal = (ownerId) => ({ users, opportunities: [{ id: 'x1', orgId: 'org_a', opportunityName: 'Acme renewal', account: 'Acme', accountId: null, stage: 'Discovery', pipelineId: 'default', contactIds: [], stageHistory: [], comments: [], closeDateHistory: [], ownerId, salesRep: named(ownerId) }] });
+// An org whose stages are its own (state §0.299): a deal is made and moved in those alone.
+const ownStages = [{ id: 'org_a', orgId: 'org_a', extra: { funnelStages: [{ name: 'Site visit', weight: 20 }, { name: 'Bid sent', weight: 50 }] }, funnelStages: [{ name: 'Site visit', weight: 20 }, { name: 'Bid sent', weight: 50 }], stages: [] }];
+const staged = (op) => ({ users, settings: ownStages, opportunities: op.kind === 'insert' ? [{ ...deal(MINE).opportunities[0], id: 'x2' }] : [] }[op.table] || []);
 const task = (ownerId) => ({ users, tasks: [{ id: 'x1', orgId: 'org_a', title: 'Call back', ownerId, assignedTo: named(ownerId) }] });
 const report = (ownerId) => ({ users, saved_reports: [{ id: 'x1', orgId: 'org_a', ownerId, name: 'Won deals', source: 'opportunities', config: null, isShared: true }] });   // a report's owner is a Clerk id
 const claim = (requesterId) => ({ users, lead_claim_requests: [{ id: 'x1', orgId: 'org_a', leadId: 'l1', requesterId, status: 'pending', note: null }] });
@@ -52,6 +55,9 @@ export const REQUESTS = {
         { what: "a save of the caller's own deal", method: 'PUT', userId: REP, body: { id: 'x1', nextSteps: 'Call' }, rows: deal(MINE) },
         { what: 'a save of an unassigned deal', method: 'PUT', userId: REP, body: { id: 'x1', nextSteps: 'Call' }, rows: deal(null) },
         { what: "a team note on another rep's deal", method: 'PUT', userId: REP, body: { id: 'x1', note: { op: 'add', text: 'Hello' } }, rows: deal(OTHERS) },
+        { what: "a create in a stage of the org's own", method: 'POST', userId: REP, body: { id: 'x2', opportunityName: 'New', stage: 'bid SENT', pipelineId: 'default' }, rows: staged },
+        { what: 'a create in a stage the org has not', method: 'POST', userId: REP, body: { id: 'x2', opportunityName: 'New', stage: 'Proposal', pipelineId: 'default' }, rows: staged },
+        { what: 'a save onto a stage the org has not', method: 'PUT', userId: REP, body: { id: 'x1', stage: 'Proposal' }, rows: { ...deal(MINE), settings: ownStages } },
         { what: "a team note on a deal reassigned since the check", method: 'PUT', userId: REP, body: { id: 'x1', note: { op: 'add', text: 'Hello' } }, rows: handedOn, afterWrite: 'its write names the owner, so it touches no row; the deal is read again and refused' },
         { what: 'a save of an owned deal by a caller on no roster', method: 'PUT', userId: GONE, body: { id: 'x1', nextSteps: 'Call' }, rows: { opportunities: deal(OTHERS).opportunities } },
         { what: "the org-wide wipe is an Admin's", method: 'DELETE', userId: REP, qs: { clear: 'true' }, rows: deal(MINE) },

@@ -3,14 +3,14 @@ import { useApp } from '../AppContext';
 import { quarterOf, quarterRange, groupByQuarter, fiscalStartOf } from '../utils/quarters';
 import { todayLocal, calendarDays } from '../utils/dateLocal';
 import { T } from '../tokens.js';
+import { commitStagesOf } from '../utils/stages.js';
 
 // ── Tokens — exact match to PipelineTab ──────────────────────
 
 const stageColor = (s) => T.stages[s] || T.inkMuted;
 const eyebrow = { fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans };
 
-function qSummary(opps) {
-    const commitStages = ['Negotiation', 'Negotiation/Review', 'Contracts', 'Closing'];
+function qSummary(opps, commitStages) {
     const total    = opps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
     const weighted = opps.reduce((s, o) => s + (parseFloat(o.arr) || 0) * ((parseFloat(o.probability) || 0) / 100), 0);
     const commit   = opps.filter(o => commitStages.includes(o.stage)).reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
@@ -189,7 +189,7 @@ function TableRow({ opp, canSeeAll, dealScoreOf, onEdit, selectMode, isSelected,
 }
 
 // ── Quarter rail ──────────────────────────────────────────────
-function QuarterRail({ groups, activeKey, onSelect, totalAll, currentKey, fiscalStart }) {
+function QuarterRail({ commitStages, groups, activeKey, onSelect, totalAll, currentKey, fiscalStart }) {
     return (
         <div style={{
             width: 220,
@@ -206,7 +206,7 @@ function QuarterRail({ groups, activeKey, onSelect, totalAll, currentKey, fiscal
             <div style={{ ...eyebrow, padding: '6px 10px 8px' }}>Quarters</div>
 
             {groups.map(g => {
-                const s       = qSummary(g.opps);
+                const s       = qSummary(g.opps, commitStages);
                 const isActive  = g.key === activeKey;
                 const isCurrent = g.key === currentKey;
                 const pct       = totalAll > 0 ? Math.min(100, (s.total / totalAll) * 100) : 0;
@@ -270,11 +270,11 @@ function QuarterRail({ groups, activeKey, onSelect, totalAll, currentKey, fiscal
 }
 
 // ── Stat strip ────────────────────────────────────────────────
-function StatStrip({ sum, activeGroup, fiscalStart }) {
+function StatStrip({ sum, activeGroup, fiscalStart, commitStages }) {
     const cells = [
         { label: 'Pipeline',  value: fmtMoney(sum.total),    sub: `${sum.count} deals`,         accent: T.borderStrong },
         { label: 'Weighted',  value: fmtMoney(sum.weighted), sub: 'probability-adjusted',        accent: T.borderStrong },
-        { label: 'Commit',    value: fmtMoney(sum.commit),   sub: 'Negotiation + Closing',       accent: T.ok           },
+        { label: 'Commit',    value: fmtMoney(sum.commit),   sub: commitStages.join(' + '),       accent: T.ok           },
         { label: 'Quarter',   value: activeGroup ? activeGroup.longLabel : '—',
                                                               sub: !activeGroup ? ''
                                                                    : activeGroup.undated ? 'no close date set'
@@ -318,6 +318,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode 
     const { canSeeAll, dealScoreOf, settings } = useApp();
     const toggleSelect = (id) => setSelectedOpps && setSelectedOpps(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
     const fiscalStart = fiscalStartOf(settings?.fiscalYearStart);
+    const commitStages = commitStagesOf(settings);   // the org's last two open stages (state §0.299)
 
     // The tab decides what the list shows. Its "All open" default already
     // excludes closed deals when no stage filter is set; when the Filter popover
@@ -342,7 +343,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode 
     // fall back gracefully. We derive this on every render — no stale state.
     const validKey    = groups.find(g => g.key === activeKey)?.key || groups[0]?.key || null;
     const activeGroup = groups.find(g => g.key === validKey) || null;
-    const sum         = activeGroup ? qSummary(activeGroup.opps) : { total: 0, weighted: 0, commit: 0, count: 0 };
+    const sum         = activeGroup ? qSummary(activeGroup.opps, commitStages) : { total: 0, weighted: 0, commit: 0, count: 0 };
     const totalAll    = listOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
 
     // ── Empty state ───────────────────────────────────────────
@@ -359,6 +360,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode 
 
             {/* Quarter rail */}
             <QuarterRail
+                commitStages={commitStages}
                 groups={groups}
                 activeKey={validKey}
                 onSelect={setActiveKey}
@@ -371,7 +373,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden', minWidth: 0 }}>
 
                 {/* Stat strip */}
-                <StatStrip sum={sum} activeGroup={activeGroup} fiscalStart={fiscalStart}/>
+                <StatStrip sum={sum} activeGroup={activeGroup} fiscalStart={fiscalStart} commitStages={commitStages}/>
 
                 {/* Table */}
                 <div style={{

@@ -168,8 +168,18 @@ const reportPrompt = [
     prompt('a report by prompt, AI open to Admins: the rest refused in words', 'Admin only'),
 ];
 
+// A settings save whose list drops what a deal of the org is in (state §0.297, §0.299): read to be refused, an Admin's alone.
+const CLOSES = [{ name: 'Closed Won', weight: 100 }, { name: 'Closed Lost', weight: 0 }];
+const inUse = (stage, pipelineId) => ({ settings: [{ id: 'org_a', orgId: 'org_a', extra: { pipelines: [{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }], funnelStages: [{ name: 'Site visit', weight: 20 }, { name: 'Bid sent', weight: 50 }, ...CLOSES] } }], opportunities: [{ id: 'd1', orgId: 'org_a', stage, pipelineId }] });
+const settingsSaves = [
+    { what: 'a pipelines list without one an open deal is in', method: 'PUT', body: { pipelines: [{ id: 'p1', name: 'One' }] }, rows: inUse('Proposal', 'p2') },
+    { what: 'a stages list without the one a deal is in', method: 'PUT', body: { funnelStages: [{ name: 'Bid sent', weight: 50 }, ...CLOSES] }, rows: inUse('Site visit', 'p1') },
+    { what: "a stages list without one of the old column's", method: 'PUT', body: { funnelStages: [{ name: 'Bid sent', weight: 50 }, ...CLOSES] }, rows: { settings: [{ id: 'org_a', orgId: 'org_a', extra: {}, stages: [{ name: 'Old one', weight: 5 }, ...CLOSES] }], opportunities: [{ id: 'd1', orgId: 'org_a', stage: 'Old one', pipelineId: 'p1' }] } },
+    { what: 'a stages list with no open stage', method: 'PUT', body: { funnelStages: CLOSES }, rows: inUse('Closed Won', 'p1') },
+];
+
 export const REQUESTS = {
-    'report-prompt': reportPrompt,
+    'report-prompt': reportPrompt, settings: settingsSaves,
     documents, 'calendar-connections': calendarConnections, 'calendar-oauth-start': calendarOauthStart, 'calendar-oauth-callback': calendarOauthCallback,
     'ai-score': aiScore, 'email-inbound': emailInbound, 'send-email': sendEmail, 'send-sms': sendSms, 'lead-intake': leadIntake, 'dispatch-status': dispatchStatus,
 };

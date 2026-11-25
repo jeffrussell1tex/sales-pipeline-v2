@@ -199,7 +199,7 @@ test('IMPORT: an Overwrite appends a close-date move per row it moves (source im
     const r = await put(A, BOB, [
         { id: D('i1'), forecastedCloseDate: '2027-07-07' },                  // the date moved
         { id: D('i2'), forecastedCloseDate: '2026-12-31', stage: 'Proposal' }, // nothing moved
-        { id: D('i3'), stage: 'Negotiation', daysInStage: '3' },             // the stage moved
+        { id: D('i3'), stage: 'Negotiation/Review', daysInStage: '3' },             // the stage moved
     ]);
     assert.equal(r.statusCode, 200, r.body);
     const [i1, i2, i3] = [await dealOf(D('i1')), await dealOf(D('i2')), await dealOf(D('i3'))];
@@ -209,11 +209,11 @@ test('IMPORT: an Overwrite appends a close-date move per row it moves (source im
     assert.equal(i2.closeDateHistory, null, 'a row it leaves: none');
     assert.deepEqual(i2.stageHistory, [{ prevStage: 'Qualification', stage: 'Proposal', date: '2026-10-01', source: 'import' }], 'REGRESSION (Q4): an untouched row\'s stage history as stored');
     assert.equal(i3.closeDateHistory, null, 'the batch named the date, this row did not move it');
-    assert.equal(i3.stage, 'Negotiation');
+    assert.equal(i3.stage, 'Negotiation/Review');
     assert.equal(i3.stageHistory.length, 2, 'appended, not replaced');
     assert.deepEqual(i3.stageHistory[0], { prevStage: 'Discovery', stage: 'Proposal', date: '2026-09-01', source: 'import' }, 'the earlier entry kept, first');
     const s = i3.stageHistory[1];
-    assert.deepEqual([s.prevStage, s.stage, s.date, s.source, s.authorId, s.author], ['Proposal', 'Negotiation', i3.stageChangedDate, 'import', BOB.id, BOB.name], 'from the stage as stored, dated the clock derived');
+    assert.deepEqual([s.prevStage, s.stage, s.date, s.source, s.authorId, s.author], ['Proposal', 'Negotiation/Review', i3.stageChangedDate, 'import', BOB.id, BOB.name], 'from the stage as stored, dated the clock derived');
     assert.ok(isStageEntry(s));
     const bulk = await auditsOf('opportunity.close_dates_moved_bulk');
     assert.equal(bulk.length, 1);
@@ -223,10 +223,10 @@ test('IMPORT: an Overwrite appends a close-date move per row it moves (source im
 // ── STAGE ────────────────────────────────────────────────────────────────────
 
 test('STAGE: a single save\'s stage entry carries the member\'s id and where it was made (Q4)', async () => {
-    const r = await put(A, KAREN, { id: D('stage'), stage: 'Negotiation', stageChangedDate: TODAY }, 'User');
+    const r = await put(A, KAREN, { id: D('stage'), stage: 'Negotiation/Review', stageChangedDate: TODAY }, 'User');
     assert.equal(r.statusCode, 200, r.body);
     const [e] = (await dealOf(D('stage'))).stageHistory;
-    assert.deepEqual([e.prevStage, e.stage, e.author, e.authorId, e.source], ['Proposal', 'Negotiation', KAREN.name, KAREN.id, 'deal']);
+    assert.deepEqual([e.prevStage, e.stage, e.author, e.authorId, e.source], ['Proposal', 'Negotiation/Review', KAREN.name, KAREN.id, 'deal']);
     assert.ok(isStageEntry(e));
 });
 

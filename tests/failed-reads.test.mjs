@@ -121,8 +121,8 @@ test('THE GUARD: a request whose caller cannot be read is a 500 with nothing wri
     // maker's, a notice's): one leaving the first list answers a failed read as something else.
     assert.deepEqual([...threw].sort(), methodsOf(EXPECT_THREW));
     assert.deepEqual([...named].sort(), methodsOf(EXPECT_NAMED));
-    assert.ok(asked >= 1482, `${asked} requests read the caller`);
-    assert.ok(refused >= 1061, `${refused} of them were refused`);
+    assert.ok(asked >= 1486, `${asked} requests read the caller`);
+    assert.ok(refused >= 1066, `${refused} of them were refused`);
 });
 test('THE GUARD: no read of the caller is caught where it is asked — getCallerName is the one that answers none', () => {
     const CAUGHT = /\b(resolveCaller|getCallerId|stampOwnerIds?|assertOwnership|ownerWriteFilter|ownerIdForWrite|dealReadContext|dealAccess|repScopeOf)\((?:[^()]|\([^()]*\))*\)\s*\.(catch|then)\(/;

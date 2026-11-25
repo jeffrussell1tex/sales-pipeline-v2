@@ -94,7 +94,7 @@ test('a new deal falls back sensibly when the file is thin', () => {
     const row = buildOpportunityRow({ account: 'Acme' }, opts);
     assert.equal(row.opportunityName, 'Acme', 'name falls back to the account');
     assert.equal(row.salesRep, 'Jeff');
-    assert.equal(row.stage, 'Qualification');
+    assert.equal(row.stage, '', "a blank Stage is the server's to decide (state §0.299) — the org's first, never one written in the app");
     assert.equal(row.arr, 0);
     assert.equal(row.probability, null);
 });

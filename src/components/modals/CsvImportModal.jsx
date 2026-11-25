@@ -85,7 +85,7 @@ const recordLabel = (rec, importType) => {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function CsvImportModal({ importType, contacts, accounts, opportunities, users, teams, territories, dealPipeline = '', onClose, onImportContacts, onImportAccounts, onImportOpportunities, onImportUsers }) {
+export default function CsvImportModal({ importType, contacts, accounts, opportunities, users, teams, territories, stages = null, dealPipeline = '', onClose, onImportContacts, onImportAccounts, onImportOpportunities, onImportUsers }) {
     // steps: upload → mapping → preview → conflicts (if any) → results
     const [step, setStep] = useState('upload');
     const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef, onTop } = useDraggable();
@@ -291,7 +291,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         const mapped = mapCsvRows(csvRows, appFields, fieldMapping, csvLines);
         const plan = importType === 'accounts' ? planAccountImport(mapped.records, mapped.rowNumbers, accounts)
             : importType === 'contacts' ? planContactImport(mapped.records, mapped.rowNumbers, accounts, contacts)
-            : importType === 'opportunities' ? planDealImport(mapped.records, mapped.rowNumbers, accounts, opportunities)
+            : importType === 'opportunities' ? planDealImport(mapped.records, mapped.rowNumbers, accounts, opportunities, stages)
             : null;
         if (!plan) return mapped;
         return { ...mapped, records: plan.records, conflicts: plan.conflicts, refused: plan.refused, mapped: mapped.records };
@@ -436,7 +436,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // every record (the review of 3b).
     const onPreview = step === 'preview' || step === 'conflicts';
     const previewPlan = useMemo(() => (onPreview ? getMapped() : null),
-        [onPreview, importType, csvRows, csvLines, fieldMapping, accounts, contacts, opportunities]);   // eslint-disable-line react-hooks/exhaustive-deps
+        [onPreview, importType, csvRows, csvLines, fieldMapping, accounts, contacts, opportunities, stages]);   // eslint-disable-line react-hooks/exhaustive-deps
     const previewMap  = onPreview
         ? ((importing || step === 'conflicts') && checkedMap ? checkedMap : previewPlan)
         : { records: [], dropped: [], unmappedRequired: [] };

@@ -6,6 +6,8 @@ import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 // "Score all deals": who may ask Claude, and what a deal keeps of an answer (state §0.238).
 import { isoLocal, todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
 import { defaultPipelineOf } from '../utils/pipelines.js';
+import { stagesDrawn, laneReader } from '../utils/stages.js';
+import { openStagesOf, bestCaseFallbackStages } from '../utils/stageOrder.js';
 import KanbanView from '../components/KanbanView';
 import FunnelView from '../components/FunnelView';
 import ListView from '../components/ListView';
@@ -472,9 +474,8 @@ export default function PipelineTab() {
         const d = calendarDays(todayLocal(), o.forecastedCloseDate);
         return d !== null && d >= -14 && d <= 7;
     });
-    const commitOpps = visibleOpportunities.filter(o =>
-        ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)
-    );
+    const laneOf = laneReader(settings);   // the org's last two open stages are commit, the one before best case (state §0.299)
+    const commitOpps = visibleOpportunities.filter(o => laneOf(o.stage) === 'commit');
     const recentlyTouched = visibleOpportunities.filter(o => {
         if (!o.stageChangedDate) return false;
         const n = daysSince(o.stageChangedDate);   // calendar days (§0.240); null would pass `<= 7`, as NaN never did
@@ -551,7 +552,7 @@ export default function PipelineTab() {
     }, [pipelineFilteredOpps, smartPreset]);
 
     const pipelineTotalARR   = pipelineFilteredOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
-    const commitARR          = pipelineFilteredOpps.filter(o => ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)).reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+    const commitARR          = pipelineFilteredOpps.filter(o => laneOf(o.stage) === 'commit').reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
     // Weighted Revenue = sum of (arr * probability / 100) across open deals
     const weightedARR        = pipelineFilteredOpps
         .filter(o => !['Closed Won','Closed Lost'].includes(o.stage))
@@ -748,7 +749,7 @@ export default function PipelineTab() {
                         setPipelineTerritoryFilter={setPipelineTerritoryFilter}
                         allReps={allReps2}
                         allTerritories={allTerritories2}
-                        stages={stages}
+                        stages={stagesDrawn(stages, [...visibleOpportunities, ...pipelineStageFilter.filter(s => s !== '__allOpen__').map(stage => ({ stage }))])}
                         getQuarter={getQuarter}
                         getQuarterLabel={getQuarterLabel}
                         currentUser={currentUser}
@@ -909,9 +910,9 @@ export default function PipelineTab() {
                 {/* ── FORECAST VIEW ─────────────────────────────────── */}
                 {pipelineView === 'forecast' && (() => {
                     const open        = smartFilteredOpps.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
-                    const commitDeals = open.filter(o => ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
-                    const bestDeals   = open.filter(o => ['Proposal'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
-                    const pipeDeals   = open.filter(o => ['Prospecting','Qualification','Discovery','Evaluation (Demo)'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                    const commitDeals = open.filter(o => laneOf(o.stage) === 'commit').sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                    const bestDeals   = open.filter(o => laneOf(o.stage) === 'best').sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                    const pipeDeals   = open.filter(o => laneOf(o.stage) === 'pipeline').sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));   // every other open deal: one in no stage of these lists was in no lane, and in the total
                     const sumARR      = arr => arr.reduce((s,o) => s + (parseFloat(o.arr)||0), 0);
                     const forecastTotalARR = smartFilteredOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
 
@@ -940,7 +941,7 @@ export default function PipelineTab() {
                                 <div style={{ flex: 1 }}/>
                             </div>
                             <ForecastLane label="Commit"    subtitle={`${commitDeals.length} deal${commitDeals.length !== 1 ? 's' : ''} you're betting on`} opps={commitDeals} total={sumARR(commitDeals)} accent={T.ok} deps={cardCtx}/>
-                            <ForecastLane label="Best case" subtitle={`${bestDeals.length} in proposal stage`}                                               opps={bestDeals}   total={sumARR(bestDeals)}   accent={T.warn} deps={cardCtx}/>
+                            <ForecastLane label="Best case" subtitle={`${bestDeals.length} in ${bestCaseFallbackStages(openStagesOf(settings))[0] || 'no stage'}`}                                               opps={bestDeals}   total={sumARR(bestDeals)}   accent={T.warn} deps={cardCtx}/>
                             <ForecastLane label="Pipeline"  subtitle={`${pipeDeals.length} earlier stages`}                                                   opps={pipeDeals}   total={sumARR(pipeDeals)}   accent={T.info} deps={cardCtx}/>
                         </div>
                     );

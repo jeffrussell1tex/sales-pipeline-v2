@@ -4933,6 +4933,18 @@ THE GUARD: tests/gate-matrix.test.mjs.
 
 THE GUARD: tests/failed-reads.test.mjs (every function as every role, the caller's read rejected; each other read rejected alone); tests/integration/failed-reads.itest.mjs.
 
+## 18b142. A Deal's Stage Is One Of Its Org's List, And The List Is One (hard rule)
+
+**Origin (§0.299, 25 Nov 2026 — OPEN_ITEMS §4.3; Jeff: "Leave it, keep working").** Three lists of stages were drawn at once: the org's (Settings, the deal window, Reports), one written into the app (the board, the funnel, the filter) and each screen's own names for commit, best case and "need a quote". A stage an Admin added had no column; the server stored any name at all.
+
+1. **The org's stages are read through src/utils/stages.js** — `orgStages`, `firstStageOf`, `laneReader`, `commitStagesOf`, `quoteReader`, `reopenStage` — by the Pipeline tab, the deal window, Quotes, the deal import, Funnel stages and the two writes; Home, Reports, the report engine and its prompt read stageOrder.js's order, which it stands on; the score reads `funnelStagesOf`; Settings' card and a new pipeline's copy, the stored list. Closed Won and Closed Lost are always of it, last, by those names. No open stage's name is written into code that decides on deals (the class scan, tests/stages.test.mjs — lists, comparisons and defaults; three files named: the app's own list twice, and the momentum alert, filed); colours and the email badge still go by name.
+2. **The Pipeline tab's board, funnel and stage filter draw every stage a deal there is in** (`stagesDrawn`; the board and funnel without Closed Lost): one off the list has a column, a row, an option — it is no drop target and no step between two others. The deal window's ribbon and Reports' funnels draw the org's alone.
+3. **A write names a stage of the org's, in the org's spelling** (`checkStages`, the deals endpoint's four writes; a backup's restore is not asked): refused otherwise, nothing written; a create naming none is made in the first; a blank on a save is not named; the one the deal has is never asked — but the org's own spelling named exactly is a move onto it. A bulk row the caller may not save, or that the org does not hold, refuses nothing: a refusal never tells of a deal they cannot read.
+4. **A stages save is the whole list, judged as the deals hold it**: exact names. A rename drops the name its deals hold, so a stage with any deal in it — a closed one too, there is no other to count in — is neither dropped nor renamed. A name the stored list holds, exactly and as often as it holds it, is never asked again for its length, a twin or reading as closed; a blank name, every weight (a whole 0–100), the two closes and an open stage are asked of every save.
+5. **The page sends what it draws**: one row a name, keyed apart, its rules the server's own (`stagesRefused`) said before anything is sent, its controls held while a save is out.
+
+THE GUARD: tests/stages.test.mjs, tests/integration/deal-stage.itest.mjs. Left by it: OPEN_ITEMS §4.2.
+
 ## 18b141. What An Answer Holds Is Run (hard rule)
 
 **Origin (§0.298, 24 Nov 2026; OPEN_ITEMS §4.6, §0.288 (j)).** The gate matrix runs who is refused; nothing ran, function by function and role by role, what a 200 holds (some integration suites assert some rows). Within one org: every SPIFF claim to every role, a deal's score to whoever named the deal, a private note's words in the audit log, members' addresses in a shared report, a whole job on a quote, an AI key in a backup's file.

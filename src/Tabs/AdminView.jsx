@@ -409,7 +409,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
 
         // Sales process Group 1 detail pages
         if (id === 'pipelines')            return <PanelGate id="pipelines" onBack={onBack}><PipelinesDetail        settings={settings} setSettings={setSettings} onBack={onBack}/></PanelGate>;
-        if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'funnel-stages')        return <PanelGate id="funnel-stages" onBack={onBack}><FunnelStagesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/></PanelGate>;
         if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
 

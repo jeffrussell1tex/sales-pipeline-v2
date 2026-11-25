@@ -914,7 +914,7 @@ export const UNREACHED = {
     'saved-reports.mjs': 1,
     'score-deals-batch.mjs': 1,
     'score-leads-batch.mjs': 3,
-    'settings.mjs': 4,
+    'settings.mjs': 3,
     'spiff-claims.mjs': 2,
     'task-reminders.mjs': 4,
     'users-sync.mjs': 2,

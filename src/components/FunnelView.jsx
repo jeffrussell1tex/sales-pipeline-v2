@@ -2,6 +2,7 @@ import React from 'react';
 import { useApp } from '../AppContext';
 import { T } from '../tokens.js';
 import { todayLocal, daysSince, calendarDays } from '../utils/dateLocal';
+import { stagesDrawn } from '../utils/stages.js';
 
 // ── Tokens — exact match to TOKENS in Funnel Redesign mockup ─
 
@@ -271,7 +272,7 @@ export default function FunnelView({
     const today = new Date();
 
     // Build stage data — mirrors FV1Home stageData computation
-    const visibleStages = stages.filter(s => s !== 'Closed Lost');
+    const visibleStages = stagesDrawn(stages, pipelineFilteredOpps).filter(s => s !== 'Closed Lost');   // as the board's (state §0.299)
     const stageData = visibleStages.map(s => {
         const deals = pipelineFilteredOpps.filter(o => o.stage === s);
         const avgDays = deals.length === 0 ? 0 : Math.round(
@@ -292,6 +293,9 @@ export default function FunnelView({
     });
 
     const maxCount = Math.max(...stageData.map(s => s.count), 1);
+    // What one stage is to the next is read over the org's own, in order: a row for any other stage is no step (§0.299).
+    const inOrder = stageData.filter(d => stages.includes(d.stage));
+    const before = (sd) => { const k = inOrder.indexOf(sd); return k > 0 ? inOrder[k - 1].count : sd.count; };
 
     // Stalled deals — open deals with no stage change in 14+ days
     const allStuck = pipelineFilteredOpps.filter(o => {
@@ -303,8 +307,8 @@ export default function FunnelView({
 
     const totalPipeline = stageData.reduce((s, d) => s + d.value, 0);
     const totalCount    = stageData.reduce((s, d) => s + d.count, 0);
-    const topStage      = stageData[0];
-    const bottomStage   = stageData[stageData.length - 1];
+    const topStage      = inOrder[0];
+    const bottomStage   = inOrder[inOrder.length - 1];
     const topToBottomConv = topStage && topStage.count > 0
         ? Math.round((bottomStage.count / topStage.count) * 100)
         : 0;
@@ -352,7 +356,7 @@ export default function FunnelView({
                                 sd={sd}
                                 idx={i}
                                 total={stageData.length}
-                                prevCount={i > 0 ? stageData[i - 1].count : sd.count}
+                                prevCount={before(sd)}
                                 widthPct={maxCount > 0 ? sd.count / maxCount : 0}
                                 color={sc(sd.stage)}
                                 expanded={!!expandedStages[sd.stage]}
@@ -377,8 +381,8 @@ export default function FunnelView({
                             Stage-to-stage conversion
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            {stageData.slice(0, -1).map((sd, i) => {
-                                const next = stageData[i + 1];
+                            {inOrder.slice(0, -1).map((sd, i) => {
+                                const next = inOrder[i + 1];
                                 const conv = sd.count === 0 ? 0 : Math.round((next.count / sd.count) * 100);
                                 const leak = conv < 50;
                                 return (
@@ -395,7 +399,7 @@ export default function FunnelView({
                                                 {sd.stage.slice(0, 4)} → {next.stage.slice(0, 4)}
                                             </div>
                                         </div>
-                                        {i < stageData.length - 2 && (
+                                        {i < inOrder.length - 2 && (
                                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                                 <path d="M9 6l6 6-6 6"/>
                                             </svg>

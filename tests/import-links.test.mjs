@@ -214,7 +214,7 @@ test('THE GUARD: the modal plans an account import at Preview through planAccoun
     assert.ok(m.includes('const checked = getMapped();\n        setCheckedMap(checked);\n        const { records: data, dropped, conflicts: planned, refused = [] } = checked;'), 'the plan Check for Duplicates read is kept');
     assert.ok(m.includes('const { records, dropped, refused = [] } = checkedMap || getMapped();'), 'the import from Conflicts sends the plan its conflicts index (the review of 3a)');
     assert.ok(m.includes("? ((importing || step === 'conflicts') && checkedMap ? checkedMap : previewPlan)"), 'not planned again while the rows it sends land, nor under the Conflicts step (the review of 3a)');
-    assert.ok(m.includes('const previewPlan = useMemo(() => (onPreview ? getMapped() : null),') && m.includes('[onPreview, importType, csvRows, csvLines, fieldMapping, accounts, contacts, opportunities]);'), 'planned once for the file, its mapping and the lists — never on every render (the review of 3b)');
+    assert.ok(m.includes('const previewPlan = useMemo(() => (onPreview ? getMapped() : null),') && m.includes('[onPreview, importType, csvRows, csvLines, fieldMapping, accounts, contacts, opportunities, stages]);'), 'planned once for the file, its mapping and the lists — never on every render (the review of 3b)');
     assert.ok(m.includes("{previewData.length > 0 && conflicts.length === previewData.length && bulkMode === 'skip' && ("), 'nothing to import is said whatever was refused (the review of 3a)');
     assert.ok(m.includes('{previewRefused.length > 0\n                                    ? `Every row of this file that can be imported already exists (${previewRefused.length} refused — listed at Preview).`'), '…and never that every record exists when some were refused');
     assert.ok(m.includes('runImport(data, [], dropped.length, refused);') && m.includes('runImport(records, conflicts, dropped.length, refused);'), 'both ways in carry the refused rows');
@@ -500,7 +500,7 @@ test("THE IMPORTER RULE, RUN (state §0.217, the review): only a row naming no o
 test("THE GUARD (state §0.216): the modal plans the contact and deal imports at Preview, an Overwrite sends the cells the file fills, and the Results count the new companies and say the owner names", () => {
     const m = code(read('src/components/modals/CsvImportModal.jsx'));
     assert.ok(m.includes(": importType === 'contacts' ? planContactImport(mapped.records, mapped.rowNumbers, accounts, contacts)"), "the caller's whole lists — merged-away rows name their survivors");
-    assert.ok(m.includes(": importType === 'opportunities' ? planDealImport(mapped.records, mapped.rowNumbers, accounts, opportunities)"));
+    assert.ok(m.includes(": importType === 'opportunities' ? planDealImport(mapped.records, mapped.rowNumbers, accounts, opportunities, stages)"));
     assert.ok(m.includes('.map(c => ({ ...filledCells(c.incoming), _existingId: c.existing.id }));'), 'Q14: an Overwrite\'s blank cell is not sent');
     assert.ok(m.includes("import { mapCsvRows, describeDropped, filledCells } from '../../utils/csvMapping';"));
     assert.ok(!/existingContacts\.find|existingOpps\.find|norm\(o\.account\) === norm\(rec\.account\)/.test(m), 'no first-of-a-name contact or deal match left');

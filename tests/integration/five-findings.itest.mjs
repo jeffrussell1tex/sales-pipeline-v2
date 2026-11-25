@@ -107,7 +107,7 @@ after(cleanup);
 
 test('EMAILS: another member\'s stage move, close and edit name them by member name — never the Clerk id', async () => {
     mailed.length = 0;
-    assert.equal((await put(BOB, { id: D('bobmoves'), stage: 'Negotiation' })).statusCode, 200);
+    assert.equal((await put(BOB, { id: D('bobmoves'), stage: 'Negotiation/Review' })).statusCode, 200);
     const [moved] = sentTo(KAREN.email, 'stageChanged');
     assert.equal(moved?.changedBy, BOB.name, 'REGRESSION (§0.240): "user_… updated the stage"');
     assert.equal((await put(BOB, { id: D('bobmoves'), nextSteps: 'call' })).statusCode, 200);
@@ -120,7 +120,7 @@ test('EMAILS: another member\'s stage move, close and edit name them by member n
 
 test('EMAILS: a rep is not emailed about their own stage move, close or edit (Jeff: "Skip own moves") — by owner id', async () => {
     mailed.length = 0;
-    assert.equal((await put(KAREN, { id: D('karenmoves'), stage: 'Negotiation' }, 'User')).statusCode, 200);
+    assert.equal((await put(KAREN, { id: D('karenmoves'), stage: 'Negotiation/Review' }, 'User')).statusCode, 200);
     assert.equal((await put(KAREN, { id: D('karenmoves'), nextSteps: 'mine' }, 'User')).statusCode, 200);
     assert.equal((await put(KAREN, { id: D('karenmoves'), stage: 'Closed Lost', lostReason: 'x' }, 'User')).statusCode, 200);
     assert.deepEqual(mailed.filter((m) => [].concat(m.to).includes(KAREN.email)).map((m) => m.subject), [], 'REGRESSION (§0.176 (c)): a rep emailed about their own edits');
@@ -128,7 +128,7 @@ test('EMAILS: a rep is not emailed about their own stage move, close or edit (Je
 
 test('EMAILS: a caller with no member row is "Someone"', async () => {
     mailed.length = 0;
-    const r = await put(GHOST, { id: D('ghost'), stage: 'Negotiation' });
+    const r = await put(GHOST, { id: D('ghost'), stage: 'Negotiation/Review' });
     assert.equal(r.statusCode, 200, r.body);
     assert.equal(sentTo(KAREN.email, 'stageChanged')[0]?.changedBy, 'Someone');
     assert.ok(!JSON.stringify(mailed).includes(GHOST.clerk));

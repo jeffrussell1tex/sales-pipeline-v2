@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { readList, tabLists, loadsBanner, areRead, waitsFor, RECORD_LISTS, ORG_LOADS, LIST_NAMES } from './utils/listLoads.js';
 import { useListLoads } from './hooks/useListLoads.js';
 import ListsGate from './components/ui/ListsGate.jsx';
@@ -15,7 +15,8 @@ import { featureOn, dealScoreView, withDealScores } from './utils/dealScore.js';
 import { quarterOf, fiscalStartOf } from './utils/quarters';
 import { reminderStep, dueStep, taskBellEntries } from './utils/taskAlerts.js';
 import { isDispatcher, isTechnician, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
-import { initialOpportunities, stages, productOptions } from './utils/constants';
+import { initialOpportunities, productOptions } from './utils/constants';
+import { orgStages } from './utils/stages.js';
 import { useSettings } from './hooks/useSettings';
 import { useOpportunities } from './hooks/useOpportunities';
 import { useAccounts } from './hooks/useAccounts';
@@ -318,6 +319,8 @@ function App() {
         settings, setSettings,
         loadSettings, loadRoster, readSettings, settingsOrgId,
     } = useSettings({ reportLoad });
+    // The org's deal stages (state §0.299; src/utils/stages.js): the Pipeline tab drew a list written into the app.
+    const stages = useMemo(() => orgStages(settings), [settings?.funnelStages]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     // Dependency refs — populated after showConfirm/softDelete/addAudit are defined below
     const _addAuditRef    = useRef(null);

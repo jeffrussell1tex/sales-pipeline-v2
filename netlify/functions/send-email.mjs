@@ -342,7 +342,7 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">Deal</span><span>${dealName}</span></div>
                 <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
                 <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
-                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || 'Discovery')}</span></div>
+                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || '—')}</span></div>
             </div>
             <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
         `, { org: orgId });
@@ -386,7 +386,7 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">Deal</span><span>${dealName}</span></div>
                 <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
                 <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
-                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || 'Discovery')}</span></div>
+                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || '—')}</span></div>
             </div>
             <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
         `, { org: orgId });
@@ -406,7 +406,7 @@ export const emailTemplates = {
                 <div class="detail-row"><span class="detail-label">Deal</span><span>${dealName}</span></div>
                 <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
                 <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
-                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || 'Discovery')}</span></div>
+                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || '—')}</span></div>
             </div>
             <a class="btn" href="${appLink(appUrl, { kind: 'deal', id: opportunityId, org: orgId })}">View Deal →</a>
         `, { org: orgId });

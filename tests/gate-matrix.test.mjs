@@ -173,7 +173,7 @@ test('a refusal comes before any write or send; signed out, or refused by sign-i
             if (x.status !== 403 || !/turned off/.test(x.said) || x.asked) open.add(`${f} ${r.method} ${r.what || r.label || ''}, refused by sign-in: ${x.status} ${x.said}, ${x.asked} statements`);
         }
     }
-    assert.ok(refused >= 15841 && out >= 3668 && off >= 3270, `the refusals read (${refused}), the signed-out answers (${out}), sign-in's own (${off})`);
+    assert.ok(refused >= 15884 && out >= 3675 && off >= 3277, `the refusals read (${refused}), the signed-out answers (${out}), sign-in's own (${off})`);
     assert.deepEqual(wrote, [], 'REGRESSION: a write, a Clerk write or a send before its refusal');
     assert.deepEqual([...open], [], 'REGRESSION: answered a caller sign-in refused');
     for (const [f, [methods, why]] of Object.entries(PUBLIC)) assert.ok(FUNCTIONS.includes(f) && methods.length && why.length >= 9, `${f}: a public function that is there`);

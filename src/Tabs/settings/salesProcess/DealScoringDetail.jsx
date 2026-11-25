@@ -13,7 +13,8 @@ import { failureWords } from '../../../utils/refusalWords.js';
 // Only the server's own refusal is "not"; any other answer may have written (state §0.264, the unknown-save rule, Part 5).
 import { maybeSaid, writeRefusalOf, refusalError, unknownOf } from '../../../utils/refusalWords.js';
 import { standingWords, trainDealWords, featureOn, MIN_TEACHING, comparisonWords } from '../../../utils/dealScore.js';
-import { funnelRowsOf } from '../../../utils/stageOrder.js';
+import { stageRowsOf } from '../../../utils/stages.js';
+import { stageWeightOf } from '../../../utils/dealScore.js';
 
 const RULES = [
     ['No activity in over 7, 14 or 30 days', '10, 25 or 40 points'],
@@ -28,7 +29,9 @@ export const DealScoringDetail = ({ settings, setSettings, onBack }) => {
     const isAdmin = userRole === 'Admin';
     const model = settings?.dealModel || null;
     const on = featureOn(settings?.featureFlags, 'deal-scoring');
-    const stages = funnelRowsOf(settings?.funnelStages).filter((s) => s.type === 'Open');
+    const openRows = stageRowsOf(settings?.funnelStages).filter((s) => !s.close);
+    const example = openRows[Math.floor(openRows.length / 2)].name;   // one of the org's own stages (state §0.299)
+    const exampleWeight = stageWeightOf(example, settings?.funnelStages);   // as the score reads it
 
     // Train now: the server runs the nightly pass for THIS org and answers with the model as it now holds it, which
     // becomes the settings prop, so the standing below reads the server's truth. The ok check before the body; a refusal
@@ -105,7 +108,7 @@ export const DealScoringDetail = ({ settings, setSettings, onBack }) => {
                         ))}
                     </div>
                     <div style={{ marginTop: 10, fontSize: 12, color: T.inkMuted, lineHeight: 1.55, fontFamily: T.sans }}>
-                        The points come off 100 and that share comes off the stage's weight: a deal in a {stages.find((s) => s.name === 'Proposal')?.weight ?? 60}% stage with no activities logged reads {Math.round((stages.find((s) => s.name === 'Proposal')?.weight ?? 60) * 0.7)}%. A deal reads Healthy at three quarters of its stage's weight or more, At Risk at half, Critical below.
+                        The points come off 100 and that share comes off the stage's weight: a deal in {example} ({exampleWeight}%) with no activities logged reads {Math.round(exampleWeight * 0.7)}%. A deal reads Healthy at three quarters of its stage's weight or more, At Risk at half, Critical below.
                     </div>
                 </CSectionCard>
             </div>

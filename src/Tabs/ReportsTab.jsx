@@ -6,7 +6,6 @@ import { parseLocalDate, isoLocal, todayLocal, daysSince, calendarDays, timeline
 // the reports used to read the free-text notes instead of the picked category,
 // and the closing history entry's own stage instead of the stage it came from.
 import { lossBucketOf, exitStageOf, previousStageOf, lostByStageRowsOf } from '../utils/lossAnalysis';
-import { stages as defaultStages } from '../utils/constants';
 import { sliceActivities, sliceLeads, visibleReps, repsInScopeOf, activityRepOf } from '../utils/reportScope';
 import { periodRange, priorRange, inRange, dayOf, currentFiscalYear, fiscalRange } from '../utils/reportPeriod';
 import { withOwnPlans } from '../utils/quotaPlan.js';
@@ -3613,9 +3612,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         // Losses by stage exited: the stage the deal LEFT, from the closing
         // history entry's prevStage. Ordered by the org's funnel; a stage not in
         // it still shows (the old hardcoded list had no "Evaluation (Demo)").
-        const lostStageOrder = (settings.funnelStages||[]).filter(s=>s.name).map(s=>s.name).filter(s=>s!=='Closed Won'&&s!=='Closed Lost');
-        const lostByStageRows = lostByStageRowsOf(lostOppsD, lostStageOrder.length ? lostStageOrder : defaultStages.filter(s=>s!=='Closed Won'&&s!=='Closed Lost'));
-        const lostByStage = Object.fromEntries(lostByStageRows.map(r=>[r.stage, r.count]));
+        const lostByStageRows = lostByStageRowsOf(lostOppsD, openStagesOf(settings));
         const maxLostStage = Math.max(...lostByStageRows.map(r=>r.count),1);
 
         // Competitor table: lostCategory field or parse "Lost to X" from lostReason
@@ -3635,7 +3632,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
         // Biggest leak insight
         const biggestLeak = lossReasons[0];
-        const proposalLosses = lostByStage['Proposal']||0;
+        const worstStage = lostByStageRows.reduce((a, r) => (!a || r.count > a.count ? r : a), null);   // the stage most losses left, by the org's own names (state §0.299)
 
         return (
             <div style={{ fontFamily:T.sans, color:T.ink }}>
@@ -3691,7 +3688,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                         {biggestLeak && (
                             <div style={{ marginTop:14, padding:'11px 12px', background:T.surface2, borderRadius:T.r, fontSize:12, color:T.inkMid, lineHeight:1.55, fontFamily:T.sans }}>
                                 <strong style={{ color:T.ink }}>Biggest leak:</strong> {Math.round(biggestLeak.pct*100)}% of losses ({biggestLeak.reason.toLowerCase()}).
-                                {proposalLosses>0&&<> Pair that with <strong style={{ color:T.ink }}>{proposalLosses} losses at Proposal stage</strong> to isolate where the drop happens.</>}
+                                {worstStage&&<> Pair that with <strong style={{ color:T.ink }}>{worstStage.count} loss{worstStage.count === 1 ? '' : 'es'} at {worstStage.stage} stage</strong> to isolate where the drop happens.</>}
                             </div>
                         )}
                     </PanelD>
@@ -6085,8 +6082,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                 const selectedAccount = selectedOpp ? accountOfDeal(selectedOpp, accounts) : null;
 
                 // Stage journey from opportunity data
-                const funnelStages = (settings?.funnelStages?.length ? settings.funnelStages : openStagesOf(settings).map(name => ({ name })))
-                    .filter(s => s.name !== 'Closed Won' && s.name !== 'Closed Lost');
+                const funnelStages = openStagesOf(settings).map(name => ({ name, ...(settings?.funnelStages || []).find(s => s?.name === name) }));
 
                 // A won deal has visited every stage; a lost deal sits at the stage it
                 // left (exitStageOf). Both used to read −1 — "Stages completed 0 of 6".

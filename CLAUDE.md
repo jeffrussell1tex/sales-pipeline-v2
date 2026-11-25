@@ -354,6 +354,9 @@ One commit per verified batch; doc patch in the same commit.
   read through src/utils/pipelines.js, the server's too (Settings' cards alone count the stored list); a pipeline named anew that the org lacks is refused, a
   create naming none takes the org's default, a settings save drops none with open deals (THE GUARD,
   tests/pipelines.test.mjs).
+- A deal's stage is one of its org's (§0.299, guide §18b142): the list and what is read off it are read through src/utils/stages.js, over stageOrder.js, the
+  server's too; no open stage's name decides on a deal in code (three files named; colours go by name still); on the deals endpoint a stage named anew that the
+  org lacks is refused, a create naming none takes the first; the settings save drops or renames none a deal is in (THE GUARD, tests/stages.test.mjs).
 - A dispatch customer is found by one rule, on the screen and the server
   (`src/utils/dispatchCustomer.js`, guide §18b104): the deal's account by
   its link (`accountForDeal`), then the one customer linked to it — never

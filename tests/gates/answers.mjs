@@ -508,6 +508,9 @@ export const ANSWERS = {
             ["a save of the caller's own deal", "200 200 200 disp tech ro unk out"],
             ["a save of an unassigned deal", "200 200 200 disp tech ro unk out"],
             ["a team note on another rep's deal", "200 200 own disp tech ro unk out"],
+            ["a create in a stage of the org's own", "201 201 201 disp tech ro unk out"],
+            ["a create in a stage the org has not", "400 400 400 disp tech ro unk out"],
+            ["a save onto a stage the org has not", "400 400 400 disp tech ro unk out"],
             ["a team note on a deal reassigned since the check", "409 409 own disp tech ro unk out"],
             ["a save of an owned deal by a caller on no roster", "200 200 own disp tech ro unk out"],
             ["the org-wide wipe is an Admin's", "200 role role disp tech ro unk out"],
@@ -641,6 +644,12 @@ export const ANSWERS = {
     },
     'netlify/functions/settings.mjs': {
         plain: { GET: ". . . . . . . out", POST: "x x x x x x x out", PUT: ". role role role role role role out", PATCH: "x x x x x x x out", DELETE: "x x x x x x x out", HEAD: "x x x x x x x out" },
+        aimed: [
+            ["a pipelines list without one an open deal is in", "409 role role role role role role out"],
+            ["a stages list without the one a deal is in", "409 role role role role role role out"],
+            ["a stages list without one of the old column's", "409 role role role role role role out"],
+            ["a stages list with no open stage", "400 role role role role role role out"],
+        ],
     },
     'netlify/functions/spiff-claims.mjs': {
         plain: { GET: ". . . . . . . out", POST: ". . . disp tech ro unk out", PUT: ". . . disp tech ro unk out", PATCH: "x x x disp tech ro unk out", DELETE: ". . cdel disp tech ro unk out", HEAD: "x x x x x x x out" },

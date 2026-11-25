@@ -382,14 +382,14 @@ test('a column only when sent: one saved in another save\'s gap is never put bac
     await seedA();
     putSeam.beforeWrite = async () => {
         putSeam.beforeWrite = null;
-        assert.equal((await call(A, { companyName: 'Gap Co', funnelStages: [{ name: 'Gap Stage', weight: 50 }] })).status, 200);
+        assert.equal((await call(A, { companyName: 'Gap Co', funnelStages: [{ name: 'Gap Stage', weight: 50 }, { name: 'Closed Won', weight: 100 }, { name: 'Closed Lost', weight: 0 }] })).status, 200);
     };
     const r = await call(A, { competitors: ['Mine'], ifRevs: { competitors: null } });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     const row = await rowOf(A);
     assert.equal(row.companyName, 'Gap Co', 'REGRESSION: the columns rewritten from the read');
-    assert.deepEqual(row.stages, [{ name: 'Gap Stage', weight: 50 }]);
-    assert.deepEqual(row.extra.funnelStages, [{ name: 'Gap Stage', weight: 50 }]);
+    assert.deepEqual(row.stages, [{ name: 'Gap Stage', weight: 50 }, { name: 'Closed Won', weight: 100 }, { name: 'Closed Lost', weight: 0 }]);
+    assert.deepEqual(row.extra.funnelStages, [{ name: 'Gap Stage', weight: 50 }, { name: 'Closed Won', weight: 100 }, { name: 'Closed Lost', weight: 0 }]);
     assert.deepEqual(row.extra.competitors, ['Mine']);
     await bUntouched();
 });

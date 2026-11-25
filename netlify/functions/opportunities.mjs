@@ -33,7 +33,7 @@ import { createListRefused } from '../../src/utils/dealCreate.js';
 import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
 import { bulkAccountLinks, dealLinkDecided, dealLinkAsks } from '../../src/utils/dealAccount.js';
 import { searchKey } from '../../src/utils/searchMatch.js';
-import { checkLinks, checkBulkLinks, defaultPipelineIn } from './_links.mjs';
+import { checkLinks, checkBulkLinks, defaultPipelineIn, checkStages } from './_links.mjs';
 // A deal's score, kept on the deal by the server after each write that can move it (AI scoring batch 2A).
 import { rescoreDeals, withDealScore } from './_dealScore.mjs';
 
@@ -145,7 +145,7 @@ const sanitize = (data) => ({
     accountId:          data.accountId           || null,
     site:               data.site                || null,
     salesRep:           data.salesRep            || null,
-    stage:              data.stage               || 'Discovery',
+    stage:              data.stage               ?? null,   // one of the org's, checked before this runs (checkStages, state §0.299)
     arr:                data.arr                 ?? null,
     implementationCost: data.implementationCost  ?? null,
     forecastedCloseDate:data.forecastedCloseDate || null,
@@ -370,6 +370,9 @@ export const handler = async (event) => {
                 const people = await checkBulkLinks(DEAL_LINKS, linked.rows, orgId);
                 if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field, ids: people.ids }) };
                 if (people.rows.some(r => !r.pipelineId)) { const own = await defaultPipelineIn(orgId); people.rows = people.rows.map(r => (r.pipelineId ? r : { ...r, pipelineId: own })); }
+                const inStages = await checkStages(people.rows, orgId, { create: true });   // each row's stage, one of the org's (state §0.299)
+                if (inStages.error) return { statusCode: inStages.status, headers, body: JSON.stringify({ error: inStages.error, field: inStages.field, ids: inStages.ids }) };
+                people.rows = inStages.rows;
                 // A deal naming no Sales Rep with an ownerId is that member's, by id (Q11, state §0.216 — importerOwners, _lib.mjs).
                 const importer = await importerOwners(people.rows, orgId, 'opportunity');
                 if (importer.error) return { statusCode: importer.status, headers, body: JSON.stringify({ error: importer.error, field: importer.field, ids: importer.ids }) };
@@ -401,6 +404,9 @@ export const handler = async (event) => {
             const people = await checkLinks(DEAL_LINKS, data, null, orgId);
             if (people.error) return { statusCode: people.status, headers, body: JSON.stringify({ error: people.error, field: people.field }) };
             if (!data.pipelineId) data.pipelineId = await defaultPipelineIn(orgId);   // the org's default (state §0.297)
+            const inStage = await checkStages([data], orgId, { create: true });   // its stage, one of the org's (state §0.299)
+            if (inStage.error) return { statusCode: inStage.status, headers, body: JSON.stringify({ error: inStage.error, field: inStage.field }) };
+            data.stage = inStage.rows[0].stage;
             const named = { ...data, ...people.set };
             const dated = { ...named, createdDate: createdDayOf(named) };
             const newRow = await stampOwnerId(sanitize(link.id ? { ...dated, account: link.name, accountId: link.id } : dated), 'opportunity', { clerkUserId: userId, orgId });
@@ -506,6 +512,12 @@ export const handler = async (event) => {
                     .where(and(eq(opportunities.orgId, orgId), inArray(opportunities.id, data.map(d => d.id))));
                 const priors = new Map(priorRows.map(r => [r.id, r]));
                 data.splice(0, data.length, ...data.map(blankPipelineOff));   // a blank pipeline is not named (state §0.297): the stored one
+                // Each stage a row names anew is one of the org's, a blank one not named (state §0.299) — a row the caller may
+                // not save, or that this org does not hold, refuses nothing: bulkUpsert answers it.
+                const mayName = (r) => priors.has(r.id) && mayMutate({ ownerId: priors.get(r.id).ownerId, callerId, canSeeAll: canSeeAll(userRole) });
+                const inStages = await checkStages(data, orgId, { priors, mayAsk: mayName });
+                if (inStages.error) return { statusCode: inStages.status, headers, body: JSON.stringify({ error: inStages.error, field: inStages.field, ids: inStages.ids }) };
+                data.splice(0, data.length, ...inStages.rows);
                 // Each row's account by the single save's rule (bulkDealLinks, above); one a deal already holds is not
                 // asked again. Only a deal the caller may save is asked: one she may not is answered forbidden by
                 // bulkUpsert whatever it names, so a refusal never tells her of an account she can't open.
@@ -667,6 +679,11 @@ export const handler = async (event) => {
             delete data.stageChangedDate;
             delete data.closeDateMovedOn;
             delete data.createdDate;   // the server's once the deal exists (state §0.240): the stored one kept
+            // Its stage (state §0.299): one named anew is the org's, in its spelling — before the move is read from it; the
+            // one the deal has is never asked, a blank one not named.
+            const inStage = await checkStages([data], orgId, { priors: new Map([[data.id, existing]]) });
+            if (inStage.error) return { statusCode: inStage.status, headers, body: JSON.stringify({ error: inStage.error, field: inStage.field }) };
+            if ('stage' in inStage.rows[0]) data.stage = inStage.rows[0].stage; else delete data.stage;
             const me = await resolveCaller(userId, orgId);
             const now = new Date().toISOString();
             const serverDay = now.slice(0, 10);

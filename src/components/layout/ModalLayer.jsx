@@ -500,6 +500,7 @@ export default function ModalLayer() {
                     users={settings.users || []}
                     teams={settings.teams || []}
                     territories={settings.territories || []}
+                    stages={stages}
                     dealPipeline={allPipelines.length > 1 ? defaultPipelineOf(allPipelines).name : ''}
                     onClose={() => { document.activeElement?.blur(); setShowCsvImportModal(false); }}
                     onImportContacts={async (newContacts, overwrites = []) => {

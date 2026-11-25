@@ -120,8 +120,8 @@ test('the Funnel stages panel edits the weight the app reads (Q7) — a stored s
     assert.deepEqual(funnelRowsOf([{ name: 'X', weight: 140 }])[0].weight, 100);
     const panel = code(read('src/Tabs/settings/salesProcess/FunnelStagesDetail.jsx'));
     assert.doesNotMatch(panel, /\bprob\s*:/, 'REGRESSION: the panel edits prob');
-    assert.ok(panel.includes("update(i,'weight',"), 'the input writes weight');
-    assert.ok(panel.includes('const DEFAULT_FUNNEL_STAGES = funnelRowsOf(DEFAULT_SETTINGS.funnelStages);'), 'the app\'s own stages when none are saved');
+    assert.ok(panel.includes("update(s.key, 'weight',"), 'the input writes weight');
+    assert.ok(panel.includes('const saved = stageRowsOf(settings?.funnelStages);'), 'the app\'s own stages when none are saved');
     assert.deepEqual(funnelRowsOf(DEFAULT_SETTINGS.funnelStages).map((r) => r.name), DEFAULT_SETTINGS.funnelStages.map((s) => s.name));
 });
 

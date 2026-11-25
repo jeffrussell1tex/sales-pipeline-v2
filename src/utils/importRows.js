@@ -118,7 +118,7 @@ export function buildOpportunityRow(row, { existingId = null, currentUser = '', 
     // A member with no row here has no id (the import waits for the profile, §0.296): the name, as before.
     const byImporter = !merged.salesRep && !!currentUserId;
     merged.salesRep        = merged.salesRep        || (byImporter ? '' : currentUser);
-    merged.stage           = merged.stage           || 'Qualification';
+    // A blank Stage is sent blank: the server makes the deal in the org's first stage (state §0.299).
 
     return {
         id: typeof newId === 'function' ? newId() : undefined,

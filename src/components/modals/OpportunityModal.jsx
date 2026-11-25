@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { stages } from '../../utils/constants';
+import { orgStages, firstStageOf, reopenStage } from '../../utils/stages.js';
 import { parseLocalDate, daysSince } from '../../utils/dateLocal';
 import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
 import { readRefusal, failureWords } from '../../utils/refusalWords.js';
@@ -290,7 +290,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
     const activityTypes = ['Call', 'Email', 'Meeting', 'Demo', 'Proposal Sent', 'Follow-up', 'Other'];
 
     const stageHistory = opportunity.stageHistory || [];
-    const allStages = stages && stages.length > 0 ? stages : ['Qualification','Discovery','Evaluation (Demo)','Proposal','Negotiation/Review','Contracts','Closed Won','Closed Lost'];
+    const allStages = stages;   // the org's (orgStages), the window's own
 
     const stageDateMap = {};
     if (opportunity.createdDate) {
@@ -1072,9 +1072,7 @@ export default function OpportunityModal({
     errorMessage, onDismissError, saving, onOpenNestedContact, seed, onSeedTaken }) {
     const { openMeetingPrep } = useApp();   // the header's Prep (state §0.187)
     const { escapeBlocked } = useApp();     // the Escape order (state §0.252)
-    const stages = (settings.funnelStages && settings.funnelStages.length > 0)
-        ? settings.funnelStages.filter(s => s.name.trim()).map(s => s.name)
-        : ['Qualification', 'Discovery', 'Evaluation (Demo)', 'Proposal', 'Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'];
+    const stages = orgStages(settings);   // the org's stages (state §0.299): an entry with no name closed every window here
 
     const allPipelines = (pipelines && pipelines.length > 0) ? pipelines : [{ id: 'default', name: 'New Business', color: T.info }];
 
@@ -1089,7 +1087,7 @@ export default function OpportunityModal({
         } : {};
         const base = opportunity || {
             opportunityName: '', account: '', site: '', salesRep: '',
-            painPoints: '', contacts: '', stage: 'Qualification',
+            painPoints: '', contacts: '', stage: firstStageOf(settings),
             probability: null, arr: 0, implementationCost: 0,
             forecastedCloseDate: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
             products: '', unionized: 'No', notes: '', nextSteps: '',
@@ -1108,7 +1106,7 @@ export default function OpportunityModal({
             salesRep:        base.salesRep ?? '',
             painPoints:      base.painPoints ?? '',
             contacts:        base.contacts ?? '',
-            stage:           base.stage ?? 'Qualification',
+            stage:           base.stage ?? firstStageOf(settings),
             notes:           base.notes ?? '',
             nextSteps:       base.nextSteps ?? '',
             products:        base.products ?? '',
@@ -1244,9 +1242,9 @@ export default function OpportunityModal({
     const handleChange = (field, value) => {
         if (validationErrors[field]) setValidationErrors(prev => { const n = {...prev}; delete n[field]; return n; });
         if (field === 'stage') {
-            const stageDefault = (settings?.funnelStages || []).find(s => s.name === value);
+            const stageDefault = (settings?.funnelStages || []).find(s => s?.name === value);
             const defaultProb = stageDefault ? stageDefault.weight : null;
-            const prevStageDefault = (settings?.funnelStages || []).find(s => s.name === formData.stage);
+            const prevStageDefault = (settings?.funnelStages || []).find(s => s?.name === formData.stage);
             const prevDefaultProb = prevStageDefault ? prevStageDefault.weight : null;
             const probIsDefault = formData.probability === null || formData.probability === prevDefaultProb;
             setFormData({ ...formData, [field]: value, probability: probIsDefault ? defaultProb : formData.probability });
@@ -1262,24 +1260,20 @@ export default function OpportunityModal({
     // in useOpportunities.handleSave — unchanged.
     const isClosed = formData.stage === 'Closed Won' || formData.stage === 'Closed Lost';
     const prevOpenStageRef = useRef(null);
+    const prevProbRef = useRef(null);   // its probability then, for a stage with no default (state §0.299)
 
     const setOutcome = (stageName) => {
-        prevOpenStageRef.current = formData.stage && !formData.stage.startsWith('Closed') ? formData.stage : prevOpenStageRef.current;
-        const stageDefault = (settings?.funnelStages || []).find(s => s.name === stageName);
+        if (!isClosed) { prevOpenStageRef.current = formData.stage || null; prevProbRef.current = formData.probability; }
+        const stageDefault = (settings?.funnelStages || []).find(s => s?.name === stageName);
         // Outcomes force their probability: Won = 100, Lost = 0 (stage default wins if configured)
         const prob = stageDefault?.weight ?? (stageName === 'Closed Won' ? 100 : 0);
         setFormData({ ...formData, stage: stageName, probability: prob });
     };
 
     const reopenDeal = () => {
-        const openStages = stages.filter(st => !st.startsWith('Closed'));
-        const closingEntry = [...(opportunity?.stageHistory || [])].reverse().find(h => h.stage && h.stage.startsWith('Closed'));
-        const target = prevOpenStageRef.current
-            || (closingEntry?.prevStage && !closingEntry.prevStage.startsWith('Closed') ? closingEntry.prevStage : null)
-            || openStages[openStages.length - 1]
-            || 'Qualification';
-        const stageDefault = (settings?.funnelStages || []).find(s => s.name === target);
-        setFormData({ ...formData, stage: target, probability: stageDefault?.weight ?? formData.probability });
+        const target = reopenStage(stages, { left: prevOpenStageRef.current, held: opportunity?.stage, history: opportunity?.stageHistory });   // one the org has (state §0.299)
+        const stageDefault = (settings?.funnelStages || []).find(s => s?.name === target);
+        setFormData({ ...formData, stage: target, probability: stageDefault?.weight ?? prevProbRef.current ?? formData.probability });
     };
 
     // ── Submit handler (fully preserved) ─────────────────────
@@ -1753,7 +1747,7 @@ export default function OpportunityModal({
                                                     </div>
                                                 );
                                             }
-                                            const stageDefault = (settings?.funnelStages || []).find(s => s.name === formData.stage);
+                                            const stageDefault = (settings?.funnelStages || []).find(s => s?.name === formData.stage);
                                             const timeInStage = opportunity?.stageChangedDate ? daysSince(opportunity.stageChangedDate) : null;
                                             if (!stageDefault && timeInStage === null) return null;
                                             return (
@@ -1909,7 +1903,7 @@ export default function OpportunityModal({
 
                                     {/* ── Probability ── */}
                                     {(() => {
-                                        const stageDefault = (settings?.funnelStages || []).find(s => s.name === formData.stage);
+                                        const stageDefault = (settings?.funnelStages || []).find(s => s?.name === formData.stage);
                                         const rawWeight = stageDefault ? parseFloat(stageDefault.weight) : NaN;
                                         const defaultProb = !isNaN(rawWeight) ? rawWeight : null;
                                         const effectiveProb = (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : defaultProb;

@@ -14,11 +14,11 @@
 import { stages as defaultStages } from './constants.js';
 
 export const CLOSED_STAGES = Object.freeze(['Closed Won', 'Closed Lost']);
-const isOpen = (name) => !!name && !CLOSED_STAGES.includes(name);
+const isOpen = (name) => typeof name === 'string' && name.trim() !== '' && !CLOSED_STAGES.includes(name);
 
 /** The org's OPEN stages in order: settings.funnelStages names, else the app defaults. */
 export function openStagesOf(settings) {
-    const fromSettings = (settings?.funnelStages || []).map(s => (typeof s === 'string' ? s : s?.name)).filter(isOpen);
+    const fromSettings = (Array.isArray(settings?.funnelStages) ? settings.funnelStages : []).map(s => (typeof s === 'string' ? s : s?.name)).filter(isOpen);
     if (fromSettings.length) return [...new Set(fromSettings)];
     return defaultStages.filter(isOpen);
 }

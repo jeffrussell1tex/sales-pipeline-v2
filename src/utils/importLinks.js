@@ -28,6 +28,7 @@ import { searchKey, viaParent } from './searchMatch.js';
 import { unarchived, isMergeArchived, survivorOf, parentLabel, resolveLink, siteOutOfReach, siteNotAccount } from './pickLink.js';
 import { parentProblem, parentRefusal, rankOf } from './accountParent.js';
 import { dealKeeps } from './dealAccount.js';
+import { stageToStore } from './stages.js';
 
 const TIERS = ['account', 'business_unit', 'site'];
 const TIER_WORDS = { account: 'an account', business_unit: 'a business unit', site: 'a site' };
@@ -400,7 +401,8 @@ const dealName = (d) => String(d?.opportunityName || d?.account || '').trim();
 
 // planDealImport(records, rowNumbers, accounts, deals)
 //   records, rowNumbers  as planAccountImport's; accounts: the caller's FULL list, merged-away accounts included;
-//   deals: the deals the caller's screen holds.
+//   deals: the deals the caller's screen holds; stages: the org's (orgStages, state §0.299) — a row's Stage is one of them, in
+//   the org's spelling, or the one its duplicate holds; any other refuses the row, and a blank one is the server's to decide.
 // { records, conflicts, refused }, as planAccountImport's. Each row kept reads its account's own spelling in
 // `account` and carries `_link`: { id, name, site } — the account it is saved on, and the Site Name a site typed in
 // full gives (else ''). A duplicate is a deal on that same account, so an overwrite never moves a deal.
@@ -413,7 +415,7 @@ const dealName = (d) => String(d?.opportunityName || d?.account || '').trim();
 //   linked by id, on the account its id stands for; one with no id, by its account's name. Two such deals refuse the
 //   row, naming each with its stage; a name of no letter or digit refuses it. Two rows of the file on one deal refuse
 //   both; two new rows of one name on one account refuse both (Q13).
-export function planDealImport(records, rowNumbers, accounts, deals) {
+export function planDealImport(records, rowNumbers, accounts, deals, stages = null) {
     const rows = Array.isArray(records) ? records : [];
     const allAccounts = Array.isArray(accounts) ? accounts.filter(Boolean) : [];
     const allDeals = Array.isArray(deals) ? deals.filter(Boolean) : [];
@@ -478,6 +480,14 @@ export function planDealImport(records, rowNumbers, accounts, deals) {
         else fresh.push(i);
     });
 
+    // Each row's Stage.
+    const stageOf = new Map();
+    if (stages) rows.forEach((rec, i) => {
+        if (refused.has(i)) return;
+        const s = stageToStore(rec?.stage, stages, existingOf.get(i)?.stage ?? null);
+        if (s.refused) refuse(i, 'Stage', rec.stage, `${quoted(String(rec.stage).trim())} is not one of your organization's stages — ${stages.map(quoted).join(', ')}.`);
+        else if (s.stage) stageOf.set(i, s.stage);
+    });
     // 3. Two rows of the file on one deal: both refused. 4. Two new rows of one name on one account: both refused (Q13).
     refuseGroups(groupBy([...existingOf.keys()], (i) => existingOf.get(i).id), refuse, 'Opportunity Name', nameOf,
         (idx, i) => `${capital(rowsNamed(idx.map(rowOf)))} ${idx.length === 2 ? 'both' : 'all'} match the deal ${quoted(dealName(existingOf.get(i)))} — keep one of them.`);
@@ -491,7 +501,7 @@ export function planDealImport(records, rowNumbers, accounts, deals) {
         const link = linkOf.get(i);
         const existing = existingOf.get(i) || null;
         // A new deal is named as nameOf names it; an overwrite's blank Opportunity Name is not sent (Q14).
-        const row = { ...rec, ...(existing ? {} : { opportunityName: nameOf(i) }), account: link.name, _link: link };
+        const row = { ...rec, ...(existing ? {} : { opportunityName: nameOf(i) }), account: link.name, _link: link, ...(stageOf.has(i) ? { stage: stageOf.get(i) } : {}) };
         if (existing) conflicts.push({ incomingIndex: kept.length, incoming: row, existing, note: dealNote(existing), matchReason: 'same name + account', action: 'skip' });
         kept.push(row);
     });

@@ -185,15 +185,15 @@ test('NOTES: only the author edits or deletes — another member refused with th
 
 test('HISTORY: a move appends to the history as stored — a body\'s history and date never written; a save that moves nothing keeps both', async () => {
     const today = new Date().toISOString().slice(0, 10);
-    const r = await put(A, KAREN, { id: DSTAGE, stage: 'Negotiation', stageChangedDate: today, stageHistory: [{ stage: 'Forged' }] }, 'User');
+    const r = await put(A, KAREN, { id: DSTAGE, stage: 'Negotiation/Review', stageChangedDate: today, stageHistory: [{ stage: 'Forged' }] }, 'User');
     assert.equal(r.statusCode, 200, r.body);
     const d = await dealOf(DSTAGE);
-    assert.equal(d.stage, 'Negotiation');
+    assert.equal(d.stage, 'Negotiation/Review');
     assert.equal(d.stageChangedDate, today);
     assert.equal(d.stageHistory.length, 2, 'REGRESSION (Q3): a body\'s history written');
     assert.deepEqual(d.stageHistory[0], H1, 'the stored history kept');
     // The member's id and where it was made ride with the name since §0.239 (Jeff's Q4 — guide §18b119 rule 5).
-    assert.deepEqual({ ...d.stageHistory[1], timestamp: 't' }, { stage: 'Negotiation', date: today, prevStage: 'Proposal', author: KAREN.name, authorId: KAREN.id, timestamp: 't', source: 'deal' });
+    assert.deepEqual({ ...d.stageHistory[1], timestamp: 't' }, { stage: 'Negotiation/Review', date: today, prevStage: 'Proposal', author: KAREN.name, authorId: KAREN.id, timestamp: 't', source: 'deal' });
     const still = await put(A, KAREN, { id: DSTAGE, arr: 7, stageChangedDate: '2001-01-01', stageHistory: [] }, 'User');
     assert.equal(still.statusCode, 200, still.body);
     const e = await dealOf(DSTAGE);
@@ -208,7 +208,7 @@ test('HISTORY: moves at once are each recorded — appended to what is stored, i
     // Six at once, so their reads and writes overlap (two alone often ran one after the other — the read-then-write
     // mutant passed them, 9 Nov). Each names a stage no other does, so each is a move from whatever it read; each
     // must be in the history, however the writes interleave.
-    const STAGES = ['Negotiation', 'Closed Won', 'Qualification', 'Discovery', 'Demo', 'Contracting'];
+    const STAGES = ['Negotiation/Review', 'Closed Won', 'Qualification', 'Discovery', 'Evaluation (Demo)', 'Contracts'];
     const rs = await Promise.all(STAGES.map((stage, i) => put(A, i % 2 ? BOB : KAREN, { id: DRACE, stage }, i % 2 ? 'Admin' : 'User')));
     for (const r of rs) assert.equal(r.statusCode, 200, r.body);
     const h = (await dealOf(DRACE)).stageHistory;
