@@ -37,6 +37,8 @@ import { checkLinks, checkBulkLinks, defaultPipelineIn, checkStages } from './_l
 import { decideProbabilities, probabilityAfterMove } from '../../src/utils/dealProbability.js';
 // A deal's score, kept on the deal by the server after each write that can move it (AI scoring batch 2A).
 import { rescoreDeals, withDealScore } from './_dealScore.mjs';
+// Who a deal's email goes to: its owner, by app id (state §0.304).
+import { mailsOwner, ownerToMail } from './_dealMail.mjs';
 
 // The contacts a deal names, each a live contact of this org when a write names it anew (state §0.199;
 // its account is accountLink's, below). Its pipeline, one of the org's (state §0.297): a create that names none is the org's
@@ -82,7 +84,7 @@ const DEFAULT_PREFS = {
     overdueTaskNudge:    { enabled: true,  mode: 'digest'  },
 };
 
-// Fetch a rep's full user record (email + notification prefs) by display name.
+// The deal's owner's row (email, notification prefs, active) — by app id since §0.304; before it, by display name:
 //
 // orgId IS REQUIRED. This lookup was unscoped, which was survivable only while
 // users.email carried a GLOBAL unique constraint -- one person, one org, so a
@@ -94,17 +96,14 @@ const DEFAULT_PREFS = {
 // employee. Same defect class as the caller lookup in 18b20.3, and missed by
 // that sweep for the same reason: it is an inline query, not a call to the
 // shared helper, so nothing textual matched it.
-async function getRepUser(repName, orgId) {
-    if (!repName || !orgId) return null;
-    try {
-        const [user] = await db.select({ email: users.email, profile: users.profile })
-            .from(users)
-            .where(and(eq(users.name, repName), eq(users.orgId, orgId)));
-        return user || null;
-    } catch (err) {
-        console.error('getRepUser error:', err.message);
-        return null;
-    }
+//
+// Since §0.304 the recipient is the deal's OWNER, by app id (`_dealMail.mjs`): by the name the deal carried, a renamed
+// member's emails went to nobody or to the member who took the old name.
+async function dealOwnerRow(ownerId, orgId) {
+    const [row] = await db.select({ id: users.id, orgId: users.orgId, name: users.name, email: users.email, profile: users.profile, active: users.active })
+        .from(users)
+        .where(and(eq(users.id, ownerId), eq(users.orgId, orgId)));
+    return row || null;
 }
 
 // Check if a notification should fire instantly for this user
@@ -114,23 +113,26 @@ function shouldSendInstant(repUser, alertType) {
     return pref.enabled && pref.mode === 'instant';
 }
 
-// Fire an instant email if the rep has opted in
-async function maybeEmail(repName, alertType, templateArgs, orgId) {
+// An instant email to the deal's owner, if they opted in — never of their own act, never to a member who is not the owner
+// (state §0.304). After the save has landed: a failed read or send is logged and sends nothing, never a name in its place
+// (guide §18b138 rule 3).
+async function maybeEmail(deal, actorId, alertType, templateArgs, orgId) {
+    if (!mailsOwner(deal, actorId)) return;
     try {
-        const repUser = await getRepUser(repName, orgId);
-        if (!repUser?.email) {
-            console.warn(`${alertType}: no email found for rep`, repName);
+        const owner = ownerToMail(deal, await dealOwnerRow(deal.ownerId, orgId), orgId);
+        if (!owner) {
+            console.warn(`${alertType}: the deal's owner ${deal.ownerId} has no address to send to`);
             return;
         }
-        if (!shouldSendInstant(repUser, alertType)) {
-            console.log(`${alertType}: rep ${repName} set to digest/disabled — skipping instant`);
+        if (!shouldSendInstant(owner, alertType)) {
+            console.log(`${alertType}: owner ${owner.id} set to digest/disabled — skipping instant`);
             return;
         }
         await sendEmail({
-            to: repUser.email,
-            ...emailTemplates[alertType]({ ...templateArgs, orgId }),   // its links name the deal's org (state §0.237)
+            to: owner.email,
+            ...emailTemplates[alertType]({ ...templateArgs, repName: owner.name || 'there', orgId }),   // its links name the deal's org (state §0.237)
         });
-        console.log(`${alertType} email sent to`, repUser.email);
+        console.log(`${alertType} email sent to owner`, owner.id);
     } catch (err) {
         console.error(`${alertType} email error:`, err.message);
     }
@@ -438,10 +440,8 @@ export const handler = async (event) => {
             // and the same category as the two GET filters -- a name compared to
             // an id -- so it is fixed in the same pass. (creatorName is read before the insert since state §0.250.)
             // By owner id since state §0.292: by name, a name that could not be read was someone else's, and the rep was
-            // told of their own deal.
-            if (inserted.salesRep && !(creatorId && inserted.ownerId === creatorId)) {
-                await maybeEmail(inserted.salesRep, 'opportunityCreated', {
-                    repName:       inserted.salesRep,
+            // told of their own deal. To its owner, by app id, since §0.304.
+            await maybeEmail(inserted, creatorId, 'opportunityCreated', {
                     dealName:      inserted.opportunityName || 'New Deal',
                     account:       inserted.account,
                     arr:           inserted.arr,
@@ -449,7 +449,6 @@ export const handler = async (event) => {
                     createdBy:     creatorName || 'Someone',   // a member's name, never the Clerk id (state §0.240, finding 3)
                     opportunityId: inserted.id,
                 }, orgId);
-            }
 
             // Webhook: opportunity.created
             await dispatchWebhook(orgId, 'opportunity.created', {
@@ -653,10 +652,9 @@ export const handler = async (event) => {
                         .returning();
                     if (written) {
                         // The deal's rep hears of a note by someone else (the "new note" email, as before §0.236).
-                        const rep = written.salesRep;
-                        if (op.op === 'add' && rep && applied.note.author !== rep) {
-                            await maybeEmail(rep, 'commentAdded', {
-                                repName:       rep,
+                        // By its author's app id (state §0.304): a name was compared with the name the deal carries.
+                        if (op.op === 'add') {
+                            await maybeEmail(written, applied.note.authorId, 'commentAdded', {
                                 dealName:      written.opportunityName || 'Deal',
                                 account:       written.account,
                                 comment:       applied.note.text || '',
@@ -792,24 +790,19 @@ export const handler = async (event) => {
                 });
             }
 
-            const rep          = upserted.salesRep;
             const stageChanged = !!move && upserted.stage !== previousStage;   // this save's own move: one renamed, or moved by another, since the read is not (state §0.302)
             // Who acted, by their member name — never the Clerk id, which the emails printed (state §0.240, finding 3);
-            // "Someone" for a caller with no member row, as the texts and Slack say. A rep is not emailed about their
-            // own move (Jeff, 10 Nov: "Skip own moves"), by owner id — the name was compared to a Clerk id, so every
-            // rep heard of their own edits (§0.176 (c)). `!!` both sides: an unassigned deal and a caller with no
-            // member row both read null (the null === null collision).
+            // "Someone" for a caller with no member row, as the texts and Slack say. The deal's owner is told, by app id,
+            // never of their own move (Jeff, 10 Nov: "Skip own moves") — maybeEmail's `mailsOwner` (state §0.304).
             const actedBy = me.name || 'Someone';
-            const ownMove = !!upserted.ownerId && !!me.id && upserted.ownerId === me.id;
 
             // Email: stage changed (or deal closed)
-            if (rep && stageChanged && !ownMove) {
+            if (stageChanged) {
                 const isClosedWon  = upserted.stage === 'Closed Won';
                 const isClosedLost = upserted.stage === 'Closed Lost';
 
                 if (isClosedWon || isClosedLost) {
-                    await maybeEmail(rep, 'dealClosed', {
-                        repName:       rep,
+                    await maybeEmail(upserted, me.id, 'dealClosed', {
                         dealName:      upserted.opportunityName || 'Deal',
                         account:       upserted.account,
                         arr:           upserted.arr,
@@ -818,8 +811,7 @@ export const handler = async (event) => {
                         opportunityId: upserted.id,
                     }, orgId);
                 } else {
-                    await maybeEmail(rep, 'stageChanged', {
-                        repName:       rep,
+                    await maybeEmail(upserted, me.id, 'stageChanged', {
                         dealName:      upserted.opportunityName || 'Deal',
                         account:       upserted.account,
                         arr:           upserted.arr,
@@ -833,9 +825,8 @@ export const handler = async (event) => {
 
             // Email: general update — only if no stage change, to avoid double-emailing. A note is never part of
             // this save (state §0.236): the "new note" email is the note branch's, above.
-            if (rep && !stageChanged && !ownMove) {
-                await maybeEmail(rep, 'opportunityUpdated', {
-                    repName:       rep,
+            if (!stageChanged) {
+                await maybeEmail(upserted, me.id, 'opportunityUpdated', {
                     dealName:      upserted.opportunityName || 'Deal',
                     account:       upserted.account,
                     arr:           upserted.arr,

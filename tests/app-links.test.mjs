@@ -167,7 +167,7 @@ test('WIRING: App.jsx reads every link once, waits for the profile in an org, sw
 });
 
 test('WIRING: every sender hands its record\'s org — the deal emails\' helper, the alerts, the digests, the texts, Slack, the quotes', () => {
-    assert.ok(read('netlify/functions/opportunities.mjs').includes('...emailTemplates[alertType]({ ...templateArgs, orgId }),'));
+    assert.ok(read('netlify/functions/opportunities.mjs').includes("...emailTemplates[alertType]({ ...templateArgs, repName: owner.name || 'there', orgId }),"));
     const pa = code(read('netlify/functions/pipeline-alerts.mjs'));
     const calls = [...pa.matchAll(/(?:emailTemplates|smsTemplates|slackTemplates)\.(?:dealSilent|dealStuck|closeDateLapsed|managerDealAlert|dealMomentum|scoreDrop)\(\{([^\n]*)/g)];
     assert.ok(calls.length >= 19, `the alerts' deal calls (${calls.length})`);

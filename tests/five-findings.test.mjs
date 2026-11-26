@@ -13,6 +13,8 @@ import { readFileSync } from 'node:fs';
 import { attemptOutcome } from '../src/utils/aiCall.js';
 import { keepAppLink, APP_LINK_KEY, APP_LINK_WORDS } from '../src/utils/appLinks.js';
 import { dealBody } from '../src/utils/dealNotes.js';
+import { mailsOwner, ownerToMail } from '../netlify/functions/_dealMail.mjs';
+const count = (s, x) => s.split(x).length - 1;
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const code = (src) => src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
@@ -78,10 +80,24 @@ test('WIRING (3): the deal emails name who acted, never the Clerk id; a rep\'s o
     assert.deepEqual(s.match(/\b(createdBy|closedBy|changedBy|updatedBy|commentBy):\s*[^,\n]*\buserId\b/g) || [], [], 'REGRESSION (§0.240): a Clerk id in a name slot');
     assert.ok(!/\b(rep|salesRep)\s*!==\s*userId\b/.test(s), 'REGRESSION (§0.176 (c)): a name compared to a Clerk id');
     assert.ok(s.includes("const actedBy = me.name || 'Someone';"));
-    assert.ok(s.includes('const ownMove = !!upserted.ownerId && !!me.id && upserted.ownerId === me.id;'), 'by id, the null === null collision guarded');
-    assert.ok(s.includes('            if (rep && stageChanged && !ownMove) {'));
-    assert.ok(s.includes('            if (rep && !stageChanged && !ownMove) {'));
+    // To the deal's owner, by app id, never of their own act (state §0.304): every send through maybeEmail, its first line the rule.
+    for (const x of ['            if (stageChanged) {\n                const isClosedWon  =', '            if (!stageChanged) {\n                await maybeEmail(upserted, me.id, \'opportunityUpdated\', {', "await maybeEmail(upserted, me.id, 'dealClosed', {", "await maybeEmail(upserted, me.id, 'stageChanged', {",
+        "            await maybeEmail(inserted, creatorId, 'opportunityCreated', {", "                        if (op.op === 'add') {\n                            await maybeEmail(written, applied.note.authorId, 'commentAdded', {",
+        'async function maybeEmail(deal, actorId, alertType, templateArgs, orgId) {\n    if (!mailsOwner(deal, actorId)) return;\n    try {\n        const owner = ownerToMail(deal, await dealOwnerRow(deal.ownerId, orgId), orgId);\n        if (!owner) {',
+        "        if (!shouldSendInstant(owner, alertType)) {", '            to: owner.email,\n            ...emailTemplates[alertType]({ ...templateArgs, repName: owner.name || \'there\', orgId }),',
+        'const [row] = await db.select({ id: users.id, orgId: users.orgId, name: users.name, email: users.email, profile: users.profile, active: users.active })\n        .from(users)\n        .where(and(eq(users.id, ownerId), eq(users.orgId, orgId)));\n    return row || null;\n}']) assert.equal(count(s, x), 1, x);
+    assert.equal(count(s, 'await maybeEmail('), 5, 'five sends, each one of these');
+    assert.ok(!/eq\(users\.name|getRepUser|repName:\s+rep|\.note\.author !==|ownMove/.test(s), 'REGRESSION: a recipient or an own act by name');
     for (const slot of ['closedBy:      actedBy,', 'changedBy:     actedBy,', 'updatedBy:     actedBy,', "createdBy:     creatorName || 'Someone',", "commentBy:     applied.note.author || 'Someone',"]) assert.ok(s.includes(slot), slot);
+});
+
+test('RULE (state §0.304): a deal\'s email goes to its owner, by app id — never of their own act; to a row that is the owner, of this org, active, with an address', () => {
+    const deal = { ownerId: 'usr_k' };
+    assert.deepEqual([mailsOwner(deal, 'usr_b'), mailsOwner(deal, null), mailsOwner(deal, 'usr_k'), mailsOwner({ ownerId: null }, null), mailsOwner({ ownerId: '' }, 'usr_b'), mailsOwner({ salesRep: 'Karen' }, 'usr_b'), mailsOwner(null, 'usr_b')], [true, true, false, false, false, false, false]);
+    const row = { id: 'usr_k', orgId: 'org_a', email: 'k@x.test', active: true, name: 'Karen' };
+    assert.equal(ownerToMail(deal, row, 'org_a'), row);
+    for (const [why, r, o, d] of [['another member', { ...row, id: 'usr_t' }], ['another org', row, 'org_b'], ['inactive', { ...row, active: false }], ['no address', { ...row, email: '' }], ['a placeholder', { ...row, email: 'k@placeholder.local' }], ['the other placeholder', { ...row, email: 'k@no-email.invalid' }], ['no row', null], ['no owner', row, 'org_a', { ownerId: null }], ['no owner, no id', { ...row, id: null }, 'org_a', { ownerId: null }], ['neither named', { ...row, id: undefined }, 'org_a', {}]]) assert.equal(ownerToMail(d || deal, r, o || 'org_a'), null, why);
+    assert.equal(ownerToMail(deal, { ...row, active: undefined }, 'org_a')?.id, 'usr_k', 'active unless turned off');
 });
 
 // ── 5 ────────────────────────────────────────────────────────────────────────

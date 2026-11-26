@@ -362,6 +362,9 @@ One commit per verified batch; doc patch in the same commit.
 - The hourly alert job reads each org's stage list through the deals endpoint's reader (`funnelInOrg`), once per org; a failed read is never
   the app's list — that org's momentum is not said, the run a 500 (§0.303, guide §18b146). A member is never texted about their own act
   (`ownAct`, by app id), nor about another's move as the caller's where the move names its author (`movedByAnother`).
+- The deals endpoint's emails (created, note, stage move, close, edit) go to the deal's owner by app id — active, an address that is no
+  placeholder — never to the name the deal carries, never of their own act, greeted by their name now (§0.304, guide §18b147;
+  `_dealMail.mjs`); the alert job's and the automations' do not yet (OPEN_ITEMS §4.5, left by §0.304).
 - A deal's probability is none or a whole 0–100 (§0.300, guide §18b143; src/utils/dealProbability.js): a 400 otherwise; a single save's move that names none
   takes the stage's default unless the rep set their own, a close its own; on the app's screens one with none counts and reads at its stage's default
   (`countedProbability`); an edit sends the stage, what follows it, and the probability only once pressed or typed in its window, or once a save naming the

@@ -134,7 +134,7 @@ test('WIRING: the single create — the stamp before the insert, the pinned line
         '            const { id: creatorId, name: creatorName } = await resolveCaller(userId, orgId);',
         '            Object.assign(newRow, { createdBy: creatorName || null });\n',
         'const [inserted] = await db.insert(opportunities).values({ ...newRow, orgId }).onConflictDoNothing({ target: opportunities.id }).returning();',
-        '            if (inserted.salesRep && !(creatorId && inserted.ownerId === creatorId)) {',   // by owner id (§0.292): a failed name read was someone else's
+        "            await maybeEmail(inserted, creatorId, 'opportunityCreated', {",   // to its owner, by app id, never their own (§0.292, §0.304)
         "createdBy:     creatorName || 'Someone',",
     ].map(at);
     assert.deepEqual([...order].sort((a, b) => a - b), order, 'in order: stamped before the insert; the email after, on the same name');

@@ -63,6 +63,12 @@ const B = 'itest_ff_B';   // another org, where the GHOST's Clerk id IS a member
 const KAREN = { id: 'usr_itest-ff-karen', clerk: 'clerk_itest_ff_karen', name: 'Itest FF Karen', email: 'karen@ff.itest' };
 const BOB   = { id: 'usr_itest-ff-bob',   clerk: 'clerk_itest_ff_bob',   name: 'Itest FF Bob',   email: 'bob@ff.itest' };
 const GHOST = { clerk: 'clerk_itest_ff_ghost' };   // signed in, no member row in this org
+// The deal email's recipient is the deal's OWNER, by app id (state §0.304): Ann was renamed, and Tam has taken her old name; Ina is
+// inactive; Pia's address is a placeholder.
+const ANN = { id: 'usr_itest-ff-ann', clerk: 'clerk_itest_ff_ann', name: 'Itest FF Ann Newname', old: 'Itest FF Ann', email: 'ann@ff.itest' };
+const TAM = { id: 'usr_itest-ff-tam', clerk: 'clerk_itest_ff_tam', name: 'Itest FF Ann', email: 'tam@ff.itest' };
+const INA = { id: 'usr_itest-ff-ina', name: 'Itest FF Ina', email: 'ina@ff.itest' };
+const PIA = { id: 'usr_itest-ff-pia', name: 'Itest FF Pia', email: 'pia@placeholder.local' };
 const D = (n) => `opp_itest_ff_${n}`;
 const SERVER_DAY = () => new Date().toISOString().slice(0, 10);
 
@@ -91,6 +97,10 @@ before(async () => {
         // Karen hears of edits too, to prove her own are skipped (the update email is off by default).
         { id: KAREN.id, clerkUserId: KAREN.clerk, orgId: A, name: KAREN.name, email: KAREN.email, role: 'User', profile: { notificationPrefs: { opportunityUpdated: { enabled: true, mode: 'instant' } } } },
         { id: BOB.id,   clerkUserId: BOB.clerk,   orgId: A, name: BOB.name,   email: BOB.email,   role: 'Admin' },
+        { id: ANN.id, clerkUserId: ANN.clerk, orgId: A, name: ANN.name, email: ANN.email, role: 'User' },
+        { id: TAM.id, clerkUserId: TAM.clerk, orgId: A, name: TAM.name, email: TAM.email, role: 'User' },
+        { id: INA.id, clerkUserId: 'clerk_itest_ff_ina', orgId: A, name: INA.name, email: INA.email, role: 'User', active: false },
+        { id: PIA.id, clerkUserId: 'clerk_itest_ff_pia', orgId: A, name: PIA.name, email: PIA.email, role: 'User' },
         // The GHOST is a member of org B only: their name there must never be org A's maker.
         { id: 'usr_itest-ff-ghost-b', clerkUserId: GHOST.clerk, orgId: B, name: 'Itest FF Other Org', email: 'ghost@ff.itest', role: 'Admin' },
     ]);
@@ -98,6 +108,9 @@ before(async () => {
     const deal = (id, extra = {}) => ({ id, orgId: A, ownerId: KAREN.id, salesRep: KAREN.name, opportunityName: id, account: 'Itest FF Co', pipelineId: 'default', stage: 'Proposal', arr: '1000.00', forecastedCloseDate: '2026-12-31', createdDate: '2026-09-01', comments: [], stageHistory: [], ...extra });
     await db.insert(opportunities).values([
         deal(D('bobmoves')), deal(D('karenmoves')), deal(D('ghost')), deal(D('created')), deal(D('bulk')), deal(D('won')), deal(D('wonnamed')),
+        deal(D('ann'), { ownerId: ANN.id, salesRep: ANN.old }), deal(D('annnote'), { ownerId: ANN.id, salesRep: ANN.old }),
+        deal(D('ina'), { ownerId: INA.id, salesRep: INA.name }), deal(D('pia'), { ownerId: PIA.id, salesRep: PIA.name }),
+        deal(D('nobody'), { ownerId: null, salesRep: KAREN.name }), deal(D('blank'), { salesRep: null }),
         deal(D('maker'), { createdBy: 'Seeded maker' }), deal(D('makerbulk'), { createdBy: 'Seeded maker' }), deal(D('makernone'), { createdBy: null }),
     ]);
 });
@@ -132,6 +145,26 @@ test('EMAILS: a caller with no member row is "Someone"', async () => {
     assert.equal(r.statusCode, 200, r.body);
     assert.equal(sentTo(KAREN.email, 'stageChanged')[0]?.changedBy, 'Someone');
     assert.ok(!JSON.stringify(mailed).includes(GHOST.clerk));
+});
+
+test('EMAILS: the deal\'s owner is told, by app id — never whoever bears the name the deal carries (state §0.304)', async () => {
+    mailed.length = 0;
+    assert.equal((await put(BOB, { id: D('ann'), stage: 'Negotiation/Review' })).statusCode, 200);
+    const told = (email) => mailed.filter((m) => [].concat(m.to).includes(email)).map((m) => m.subject);
+    assert.deepEqual([told(ANN.email), told(TAM.email)], [['stageChanged'], []], 'REGRESSION: the email went to the member who took the renamed owner\'s old name');
+    assert.equal(sentTo(ANN.email, 'stageChanged')[0]?.repName, ANN.name, 'greeted by her name now');
+    assert.equal((await put(BOB, { id: D('annnote'), note: { op: 'add', text: 'For Ann' } })).statusCode, 200);
+    assert.deepEqual([told(ANN.email), told(TAM.email)], [['stageChanged', 'commentAdded'], []]);
+    // Her own note and move, though the deal carries a name that is no longer hers.
+    mailed.length = 0;
+    assert.equal((await put(ANN, { id: D('annnote'), note: { op: 'add', text: 'Mine' } }, 'User')).statusCode, 200);
+    assert.equal((await put(ANN, { id: D('ann'), stage: 'Contracts' }, 'User')).statusCode, 200);
+    assert.deepEqual(mailed.map((m) => [m.to, m.subject]), [], 'REGRESSION: her own act, emailed by name to whoever bears it');
+    // An owned deal with no name on it is told; one with a name and no owner, an inactive owner, a placeholder address, none.
+    assert.equal((await put(BOB, { id: D('blank'), stage: 'Negotiation/Review' })).statusCode, 200);
+    assert.deepEqual(told(KAREN.email), ['stageChanged'], 'the owner of a deal with no Sales Rep name');
+    for (const id of ['nobody', 'ina', 'pia']) assert.equal((await put(BOB, { id: D(id), stage: 'Negotiation/Review' })).statusCode, 200, id);
+    assert.deepEqual(mailed.map((m) => [m.to, m.subject]), [[KAREN.email, 'stageChanged']], 'REGRESSION: a deal with no owner emailed the member its name names; an inactive or a placeholder one emailed');
 });
 
 // ── CREATED ──────────────────────────────────────────────────────────────────

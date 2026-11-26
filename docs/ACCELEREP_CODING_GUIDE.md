@@ -4933,6 +4933,18 @@ THE GUARD: tests/gate-matrix.test.mjs.
 
 THE GUARD: tests/failed-reads.test.mjs (every function as every role, the caller's read rejected; each other read rejected alone); tests/integration/failed-reads.itest.mjs.
 
+## 18b147. A Deal's Email From The Deals Endpoint Goes To Its Owner, By App Id (hard rule)
+
+**Origin (§0.304, 26 Nov 2026 — OPEN_ITEMS §4.5; Jeff: "Keep working").** The deal emails went to whoever bore the name the deal carried: a renamed member's to nobody, or to the member who took the old name.
+
+1. **The recipient is the deal's owner, by app id** (`ownerId`), read in the deal's org — never a name the deal carries, which is a label (§18b20). So far the deals endpoint's five emails (created, note, stage move, close, edit); the alert job's and the automations' emails do not yet (OPEN_ITEMS §4.5, left by §0.304 (a), (c), (e)).
+2. **Never of their own act** (`mailsOwner` over `ownAct`, netlify/functions/_dealMail.mjs): the actor by app id — the caller, or a note's author.
+3. **Only to an owner who can be reached**: active, an address that is no placeholder (`reachable`); no owner, no email.
+4. **Greeted by their name now**, not the name the record carried.
+5. **After the save has landed** a failed read or send is logged and sends nothing (§18b138 rule 3).
+
+THE GUARD: tests/five-findings.test.mjs; tests/integration/five-findings.itest.mjs. Left by it: OPEN_ITEMS §4.5.
+
 ## 18b146. A Job Reads Each Org's Own Rules; A Member Is Not Told Of Their Own Act — Nor Of Another's As Theirs (hard rule)
 
 **Origin (§0.303, 26 Nov 2026 — OPEN_ITEMS §4.5; Jeff: "Keep working").** The momentum alert named two of the app's own stages; the mention text told an owner of their own act, and of another's move as the caller's.

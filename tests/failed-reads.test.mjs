@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { ROOT, ROLES, ask, functionFiles, load, shapesOf, sourceOf } from './gates/engine.mjs';
+import { mailsOwner } from '../netlify/functions/_dealMail.mjs';
 
 const REQUESTS = {};
 for (const n of ['crm', 'sales', 'quotes', 'dispatch', 'people', 'rest']) Object.assign(REQUESTS, (await import(`./gates/requests-${n}.mjs`)).REQUESTS);
@@ -380,10 +381,10 @@ test("a win chance that could not be worked out just now is said so — never la
 
 test('a deal made by its own rep tells them nothing, by owner id; made for another it does; its maker unread stores nothing', async () => {
     const src = sourceOf('opportunities');
-    const line = src.match(/if \(inserted\.salesRep && !\(creatorId && inserted\.ownerId === creatorId\)\) \{/g) || [];
+    const line = src.match(/await maybeEmail\(inserted, creatorId, 'opportunityCreated', \{/g) || [];
     assert.equal(line.length, 1);
-    const told = (inserted, creatorId) => !!(inserted.salesRep && !(creatorId && inserted.ownerId === creatorId));
-    assert.deepEqual([told({ salesRep: 'Me', ownerId: 'usr_me' }, 'usr_me'), told({ salesRep: 'Other', ownerId: 'usr_o' }, 'usr_me'), told({ salesRep: 'Other', ownerId: null }, null), told({ salesRep: null, ownerId: null }, 'usr_me')], [false, true, true, false]);
+    // Run (mailsOwner, state §0.304): a deal with no owner tells no one — by name it told the member it named (reversed by design).
+    assert.deepEqual([mailsOwner({ salesRep: 'Me', ownerId: 'usr_me' }, 'usr_me'), mailsOwner({ salesRep: 'Other', ownerId: 'usr_o' }, 'usr_me'), mailsOwner({ salesRep: 'Other', ownerId: null }, null), mailsOwner({ salesRep: null, ownerId: null }, 'usr_me')], [false, true, false, false]);
     const deals = await load('opportunities');
     const x = await run(deals, 'opportunities', { method: 'POST', body: { id: 'd9', opportunityName: 'N', account: 'A', stage: 'Proposal', salesRep: 'Me Rep' } }, 'User', isCaller, { users: [ME], accounts: [{ id: 'a1', orgId: 'org_a', name: 'A' }] });
     is500(x, 'the maker unread');
