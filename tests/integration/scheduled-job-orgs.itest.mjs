@@ -87,7 +87,7 @@ const NOW = (() => { const d = new Date(); d.setUTCHours(14, 0, 0, 0); while (d.
 const day = (n) => new Date(NOW.getTime() + n * 86400000).toISOString().slice(0, 10);
 
 const DOMAIN_A = '@itest-alerts-a.local', DOMAIN_B = '@itest-alerts-b.local';
-const PHONE_A = '+15550100001', PHONE_B = '+15550100002';
+const PHONE_A = '+15550100001', PHONE_B = '+15550100002', PHONE_ED = '+15550100003';
 const due = { timezone: 'UTC', digestTime: '14:00' };
 const dealDigest = { notificationPrefs: { stageChanged: { enabled: true, mode: 'digest' } } };
 const member = (org, key, name, role, team, profile = {}) => ({
@@ -108,7 +108,10 @@ const B_AVERY  = member(ORG_B, 'avery',  'Avery Admin',   'Admin',   null);
 // A Manager of org A whose address is a placeholder (§0.306): mailed nothing — no alert, no digest — though she leads the
 // Midmarket team (Karen-two) and has a task due today; her deal is still logged, posted and handed to the rules.
 const A_PIA    = { ...member(ORG_A, 'pia', 'Pia Placeholder', 'Manager', 'Midmarket'), email: 'pia@placeholder.local' };
-const MEMBERS = [A_KAREN, A_KAREN2, A_DANA, A_MAYA, A_AVERY, B_KAREN, B_BRAM, B_MAYA, B_AVERY, A_PIA];
+// A Dispatcher of org A stored with no address at all (§0.307): the overdue rule and the task text ask none — a job asks an address
+// only of the email it sends.
+const A_ED     = { ...member(ORG_A, 'ed', 'Ed Noaddress', 'Dispatcher', null, { mobile: PHONE_ED, smsNotifications: { enabled: true, taskReminders: true } }), email: '' };
+const MEMBERS = [A_KAREN, A_KAREN2, A_DANA, A_MAYA, A_AVERY, B_KAREN, B_BRAM, B_MAYA, B_AVERY, A_PIA, A_ED];
 
 // Every org-A record is named "Alpha …", every org-B record "Bravo …": a message
 // to one org that names the other's is the leak, whatever the people are called.
@@ -161,6 +164,8 @@ const task = (id, org, owner, title, f) => ({
 });
 const TASKS = [
     task('a_overdue', ORG_A, A_KAREN,  'Alpha overdue call',   { dueDate: day(-3) }),
+    task('a_ed_overdue', ORG_A, A_ED,  'Alpha Ed overdue',     { dueDate: day(-3) }),
+    task('a_ed_2pm',  ORG_A, A_ED,     'Alpha Ed 2pm',         { dueDate: day(0), dueTime: '14:00' }),
     task('a_today',   ORG_A, A_KAREN,  'Alpha due today',      { dueDate: day(0) }),
     task('a_2pm',     ORG_A, A_KAREN,  'Alpha 2pm call',       { dueDate: day(0), dueTime: '14:00' }),
     task('a_karen2',  ORG_A, A_KAREN2, 'Alpha Karen-two task', { dueDate: day(0) }),
@@ -226,7 +231,7 @@ test('pipeline-alerts: an org\'s stage list that cannot be read says no momentum
     const said = received(mails);
     assert.deepEqual([said[A_DANA.email], said[B_BRAM.email]], [['closeDateLapsed: Alpha Dana-old Deal', 'closeDateLapsed: Alpha No-name Deal', 'closeDateLapsed: Alpha Team Deal'], ['dealMomentum: Bravo Fast Proposal']], 'org A\'s momentum alone is not said');
     assert.ok(said[A_KAREN.email].includes('dealStuck: Alpha Stuck Deal'), 'its other alerts are');
-    assert.equal(fired.filter(f => f.trigger === 'task.overdue' && ORGS.includes(f.orgId)).length, 2, 'the overdue scan runs');
+    assert.equal(fired.filter(f => f.trigger === 'task.overdue' && ORGS.includes(f.orgId)).length, 3, 'the overdue scan runs');
     // The run after it, its list read: what was said is not said again; org A's momentum now is.
     reset();
     const again = await runPipelineAlerts({ now: NOW });
@@ -292,10 +297,11 @@ test('pipeline-alerts: the company\'s Slack post, the rules engine and the ledge
         `${ORG_A} opportunity.close_lapsed ${dealId('a_pia')}`,
         `${ORG_A} opportunity.momentum ${dealId('a_mom_early')}`, `${ORG_B} opportunity.momentum ${dealId('b_mom_early')}`,
         `${ORG_A} task.overdue task_itest_alerts_a_overdue`, `${ORG_B} task.overdue task_itest_alerts_b_overdue`,
+        `${ORG_A} task.overdue task_itest_alerts_a_ed_overdue`,
     ]));
     const ledger = await db.select().from(recommendationLog).where(inArray(recommendationLog.orgId, ORGS));
     for (const row of ledger) assert.ok(ids[row.orgId].has(row.opportunityId), `ledger row in ${row.orgId} names ${row.opportunityId}`);
-    assert.equal(ledger.length, 12, 'eight deal signals and one overdue task in org A; two deal signals and one overdue task in org B');
+    assert.equal(ledger.length, 13, 'eight deal signals and two overdue tasks in org A; two deal signals and one overdue task in org B');
     assert.ok(ledger.some(l => l.opportunityId === dealId('a_pia') && l.repName === 'Pia Placeholder'), 'REGRESSION (§0.306): a deal whose owner has no address was skipped whole');
 });
 
@@ -303,7 +309,8 @@ test('pipeline-alerts: an overdue task fires its OWN org\'s rule for its owner �
     const overdue = alertFired.filter(f => ORGS.includes(f.orgId) && f.trigger === 'task.overdue');
     assert.deepEqual(sorted(overdue.map(f => `${f.orgId} ${f.data.title} ${f.data.owner_id}`)), sorted([
         `${ORG_A} Alpha overdue call ${A_KAREN.id}`, `${ORG_B} Bravo overdue call ${B_KAREN.id}`,
-    ]), 'REGRESSION (§0.159): userByName["Karen Russell"] belonged to one org, and the other org\'s overdue task was skipped');
+        `${ORG_A} Alpha Ed overdue ${A_ED.id}`,
+    ]), 'REGRESSION (§0.159): userByName["Karen Russell"] belonged to one org, and the other org\'s overdue task was skipped; (§0.307) a member with no address had no rule fired');
 });
 
 // ── digest ───────────────────────────────────────────────────────────────────
@@ -363,5 +370,9 @@ test('task-reminders: each Karen Russell is texted their OWN task at its minute 
         'REGRESSION (§0.159): matched by name across orgs, one phone was sent both tasks and the other none');
     const ledger = await db.select().from(recommendationLog).where(inArray(recommendationLog.orgId, ORGS));
     const sent = ledger.filter(l => l.actionType === 'taskReminder').map(l => `${l.orgId} ${l.opportunityId}`);
+    // A member with no address is texted at their own number (§0.307) — the text asks none.
+    assert.deepEqual(texts.filter(t => t.to === PHONE_ED).map(t => t.body), ['TASK Alpha Ed 2pm'], 'REGRESSION (§0.307): a member with no address was never texted');
+    assert.ok(sent.includes(`${ORG_A} task_itest_alerts_a_ed_2pm`), 'on its own org\'s ledger');
+    sent.splice(sent.indexOf(`${ORG_A} task_itest_alerts_a_ed_2pm`), 1);
     assert.deepEqual(sorted(sent), sorted([`${ORG_A} task_itest_alerts_a_2pm`, `${ORG_B} task_itest_alerts_b_2pm`]), 'each reminder on its own org\'s ledger');
 });

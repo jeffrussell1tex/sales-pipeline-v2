@@ -535,7 +535,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                     if (!task.dueDate || task.dueDate >= todayStr) continue;
                     // The assignee is the task's OWNER, by app user id, in the task's own org (§0.159).
                     const assignee = ownerOf(task, rosters.get(task.orgId));
-                    if (!assignee?.email || !assignee.active) continue;
+                    if (!assignee?.active) continue;   // an active member — the rules ask any address themselves (send_email: ownerToMail; state §0.307)
                     // Cross-tenant safety: the assignee must be THIS org's user.
                     if (assignee.orgId !== task.orgId) continue;
                     const aProfile      = assignee.profile || {};

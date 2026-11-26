@@ -38,7 +38,7 @@ import { decideProbabilities, probabilityAfterMove } from '../../src/utils/dealP
 // A deal's score, kept on the deal by the server after each write that can move it (AI scoring batch 2A).
 import { rescoreDeals, withDealScore } from './_dealScore.mjs';
 // Who a deal's email goes to: its owner, by app id (state §0.304).
-import { mailsOwner, ownerToMail } from './_dealMail.mjs';
+import { mailsOwner, ownerToMail, ownerLabel } from './_dealMail.mjs';
 
 // The contacts a deal names, each a live contact of this org when a write names it anew (state §0.199;
 // its account is accountLink's, below). Its pipeline, one of the org's (state §0.297): a create that names none is the org's
@@ -104,6 +104,14 @@ async function dealOwnerRow(ownerId, orgId) {
         .from(users)
         .where(and(eq(users.id, ownerId), eq(users.orgId, orgId)));
     return row || null;
+}
+
+// The deal's owner by their name now, for the company's post (state §0.307). After the save has landed: a failed read is logged and
+// the post says "—", never the name the deal carries in its place (guide §18b138 rule 3).
+async function repLabelOf(deal, orgId) {
+    if (!deal?.ownerId) return ownerLabel(deal, null, orgId);
+    try { return ownerLabel(deal, await dealOwnerRow(deal.ownerId, orgId), orgId); }
+    catch (err) { console.error('slack rep: the deal\'s owner could not be read:', err.message); return '—'; }
 }
 
 // Check if a notification should fire instantly for this user
@@ -857,7 +865,7 @@ export const handler = async (event) => {
                 // The company's Slack post — stage changed, or closed won — the
                 // moment it happens, per the org's selection; never the rep's
                 // preferences (state §0.99, item 33). Never throws; 4 s cap.
-                await postDealEvents(orgId, { before: { stage: previousStage }, after: upserted, mover: await getCallerName(userId, orgId) });
+                await postDealEvents(orgId, { before: { stage: previousStage }, after: upserted, mover: await getCallerName(userId, orgId), rep: await repLabelOf(upserted, orgId) });
                 const autoEvt = upserted.stage === 'Closed Won' ? 'opportunity.won' : upserted.stage === 'Closed Lost' ? 'opportunity.lost' : 'opportunity.stage_changed';
                 dispatchAutomations(orgId, autoEvt, dealEventData(upserted, { from_stage: previousStage, to_stage: upserted.stage })).catch(e => console.warn('auto error:', e.message));
             }

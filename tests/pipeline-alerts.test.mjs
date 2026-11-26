@@ -59,3 +59,11 @@ test('neither helper names the loop-scoped binding, and every rep-side call hand
     assert.equal((src.match(/wantsSms\(manager\.profile \|\| \{\}\)/g) || []).length, 3, 'and their manager copies check the manager\'s');
     assert.equal((src.match(/wantsAlert\(manager\.profile \|\| \{\}, 'managerAlerts'\)/g) || []).length, 4, 'the four manager copies read the manager\'s profile blob (top-level prefs not consulted — noted in §0.95)');
 });
+
+test('a job asks an address only of the email it sends (state §0.307): the overdue-task rules and the task text need an active member, no address', () => {
+    assert.ok(src.includes('                    const assignee = ownerOf(task, rosters.get(task.orgId));\n                    if (!assignee?.active) continue;   // an active member'), 'the overdue scan: the task\'s owner, active');
+    assert.doesNotMatch(src, /!assignee\?\.email/, 'REGRESSION: a member with no address had no overdue rule fired');
+    const tr = readFileSync(new URL('../netlify/functions/task-reminders.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    assert.ok(tr.includes('        for (const user of allUsers) {\n            if (!user.active) continue;   // an active member'), 'the task text: an active member');
+    assert.doesNotMatch(tr, /!user\.email/, 'REGRESSION: a member with no address was never texted');
+});

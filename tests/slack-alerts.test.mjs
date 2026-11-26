@@ -89,7 +89,9 @@ test('sendSlackToOrg takes the alert type and asks the selection before it posts
 
 test('postDealEvents posts each event through the org path with its type, and the two templates exist', () => {
     const s = code(read('netlify/functions/send-slack.mjs'));
-    assert.ok(s.includes('export async function postDealEvents(orgId, { before, after, mover } = {}) {'));
+    assert.ok(s.includes('export async function postDealEvents(orgId, { before, after, mover, rep } = {}) {'));
+    // The Rep line is the owner handed in, by their name now (state §0.307) — never the name the deal carries.
+    assert.ok(s.includes("            repName: rep || '—',   // the deal's owner by their name now") && !/repName:\s*after\?\.salesRep/.test(s), 'REGRESSION: the Rep line by the name the deal carries');
     assert.ok(s.includes('    for (const ev of dealSlackEvents({ before, after })) {'), 'the pure detector decides what happened');
     assert.ok(s.includes("        const msg = ev.type === 'dealClosedWon' ? slackTemplates.dealWon(ctx) : slackTemplates.stageChanged(ctx);"));
     assert.ok(s.includes('        if (await sendSlackToOrg(orgId, msg, ev.type)) posted.push(ev.type);'), "the org's selection gates it, per type");
@@ -102,7 +104,11 @@ test('postDealEvents posts each event through the org path with its type, and th
 test('the deal save posts the events the moment a stage changes, naming who moved it', () => {
     const s = code(read('netlify/functions/opportunities.mjs'));
     assert.ok(s.includes("import { postDealEvents, postBulkStageMove } from './send-slack.mjs';"), 'the per-deal poster and, since §0.106, the batch poster');
-    assert.ok(s.includes('                await postDealEvents(orgId, { before: { stage: previousStage }, after: upserted, mover: await getCallerName(userId, orgId) });'));
+    assert.ok(s.includes('                await postDealEvents(orgId, { before: { stage: previousStage }, after: upserted, mover: await getCallerName(userId, orgId), rep: await repLabelOf(upserted, orgId) });'));
+    // The owner read for it is a label after the save has landed: its own catch, "—" on a failure (state §0.307; guide §18b138 rule 3).
+    // A deal with no owner reads no row and is "Unassigned" by the one rule — never the name it carries.
+    assert.ok(s.includes('async function repLabelOf(deal, orgId) {\n    if (!deal?.ownerId) return ownerLabel(deal, null, orgId);\n    try {'), 'REGRESSION: a deal with no owner posted the name it carries');
+    assert.ok(s.includes("    try { return ownerLabel(deal, await dealOwnerRow(deal.ownerId, orgId), orgId); }\n    catch (err) { console.error('slack rep: the deal\\'s owner could not be read:', err.message); return '—'; }"), 'the read keeps its own catch');
     // The mover is the caller's member name, or Someone — never the deal's rep (§0.305): with no name known, the rep was said to have moved it.
     const slack = read('netlify/functions/send-slack.mjs');
     assert.ok(slack.includes("const ctx = { mover: mover || 'Someone',   // the caller's member name") && !/mover:\s*mover\s*\|\|\s*after\?\.salesRep/.test(slack), 'REGRESSION: the deal\'s rep named as the mover');

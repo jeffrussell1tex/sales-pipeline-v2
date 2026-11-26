@@ -167,7 +167,7 @@ export const runTaskReminders = async ({ now = new Date() } = {}) => {
         let skipped = 0;
 
         for (const user of allUsers) {
-            if (!user.email || !user.active) continue;
+            if (!user.active) continue;   // an active member — the text asks a number, never an address (state §0.307)
 
             // Read SMS prefs — flat on user row (AppHeader.saveProfile pattern),
             // with fallback to user.profile for older records.

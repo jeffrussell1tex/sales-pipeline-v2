@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { attemptOutcome } from '../src/utils/aiCall.js';
 import { keepAppLink, APP_LINK_KEY, APP_LINK_WORDS } from '../src/utils/appLinks.js';
 import { dealBody } from '../src/utils/dealNotes.js';
-import { mailsOwner, ownerToMail } from '../netlify/functions/_dealMail.mjs';
+import { mailsOwner, ownerToMail, ownerLabel } from '../netlify/functions/_dealMail.mjs';
 const count = (s, x) => s.split(x).length - 1;
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
@@ -101,6 +101,15 @@ test('RULE (state §0.304): a deal\'s email goes to its owner, by app id — nev
 });
 
 // ── 5 ────────────────────────────────────────────────────────────────────────
+
+test('RULE (state §0.307): a post names the deal\'s owner by their name now — a member of this org whatever their status or address; "Unassigned" with none here; never the name the deal carries', () => {
+    const deal = { ownerId: 'usr_k', salesRep: 'Karen Oldname' }, row = { id: 'usr_k', orgId: 'org_a', name: 'Karen Newname', active: true, email: 'k@x.test' };
+    assert.equal(ownerLabel(deal, row, 'org_a'), 'Karen Newname', 'REGRESSION: the name the deal carries');
+    for (const [why, r] of [['inactive', { ...row, active: false }], ['a placeholder', { ...row, email: 'k@placeholder.local' }], ['no address', { ...row, email: '' }]]) assert.equal(ownerLabel(deal, r, 'org_a'), 'Karen Newname', `${why}: a label, still named`);
+    for (const [why, r, o, d] of [['no owner', row, 'org_a', { ownerId: null, salesRep: 'Karen Oldname' }], ['no row', null], ['another member', { ...row, id: 'usr_t' }], ['another org', row, 'org_b'], ['no deal', row, 'org_a', null]]) assert.equal(ownerLabel(d === undefined ? deal : d, r, o || 'org_a'), 'Unassigned', why);
+    for (const name of ['', '   ', null, undefined]) assert.equal(ownerLabel(deal, { ...row, name }, 'org_a'), '—', `a member with no name: ${JSON.stringify(name)}`);
+    assert.equal(ownerLabel(deal, { ...row, name: '  Karen Newname ' }, 'org_a'), 'Karen Newname', 'trimmed');
+});
 
 test('RULE (5): a deal\'s save sends no created date', () => {
     assert.deepEqual(dealBody({ id: 'd', createdDate: '2001-01-01', stage: 'X' }), { id: 'd', stage: 'X' });

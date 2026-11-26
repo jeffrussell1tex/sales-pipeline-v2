@@ -90,8 +90,9 @@ before(async () => {
 
 test("a win posts to the org's webhook the moment it happens; a plain stage change is unticked for D and posts nothing; the org's own settings row decides", async () => {
     calls.length = 0;
-    const after = { opportunityName: 'Acme renewal', account: 'Acme', arr: 120000, salesRep: 'Karen Russell', stage: 'Closed Won' };
-    assert.deepEqual(await postDealEvents(ORG_D, { before: { stage: 'Negotiation/Review' }, after, mover: 'Jeff Russell' }), ['dealClosedWon']);
+    // The deal carries a name its owner no longer has; the Rep line is the owner handed in, by their name now (state §0.307).
+    const after = { opportunityName: 'Acme renewal', account: 'Acme', arr: 120000, salesRep: 'Karen Oldname', stage: 'Closed Won' };
+    assert.deepEqual(await postDealEvents(ORG_D, { before: { stage: 'Negotiation/Review' }, after, mover: 'Jeff Russell', rep: 'Karen Russell' }), ['dealClosedWon']);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].url, SLACK_D);
     const sent = JSON.parse(calls[0].opts.body);
@@ -99,6 +100,7 @@ test("a win posts to the org's webhook the moment it happens; a plain stage chan
     assert.match(sent.text, /closed won/i);
     assert.match(JSON.stringify(sent.blocks), /Jeff Russell/, 'names who closed it');
     assert.match(JSON.stringify(sent.blocks), /Karen Russell/, 'and whose deal it is');
+    assert.ok(!JSON.stringify(sent).includes('Karen Oldname'), 'REGRESSION (§0.307): the name the deal carries printed as its rep');
     assert.deepEqual(await postDealEvents(ORG_D, { before: { stage: 'Proposal' }, after: { ...after, stage: 'Negotiation/Review' }, mover: 'Jeff Russell' }), [], 'stageChanged is unticked for D');
     assert.equal(calls.length, 1, 'nothing more fetched');
     assert.deepEqual(await postDealEvents(ORG_A, { before: { stage: 'Proposal' }, after: { ...after, stage: 'Negotiation/Review' }, mover: 'Jeff Russell' }), ['stageChanged'], "A saved before the key existed — it posts");

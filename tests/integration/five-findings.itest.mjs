@@ -49,6 +49,10 @@ mock.module(new URL('../../netlify/functions/send-email.mjs', import.meta.url).h
 });
 mock.module(new URL('../../netlify/functions/webhooks.mjs', import.meta.url).href, { namedExports: { dispatchWebhook: async () => {} } });
 mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.meta.url).href, { namedExports: { dispatchAutomations: async () => {} } });
+// The company's Slack post, recorded (state §0.307): its Rep line is the deal's owner by their name now.
+const slack = await import('../../netlify/functions/send-slack.mjs');
+const posted = [];
+mock.module(new URL('../../netlify/functions/send-slack.mjs', import.meta.url).href, { namedExports: { ...slack, postDealEvents: async (orgId, args) => { posted.push({ orgId, ...args }); return []; }, postBulkStageMove: async () => [] } });
 
 const { handler: dealsFn } = await import('../../netlify/functions/opportunities.mjs');
 const { db } = await import('../../db/index.js');
@@ -165,6 +169,16 @@ test('EMAILS: the deal\'s owner is told, by app id — never whoever bears the n
     assert.deepEqual(told(KAREN.email), ['stageChanged'], 'the owner of a deal with no Sales Rep name');
     for (const id of ['nobody', 'ina', 'pia']) assert.equal((await put(BOB, { id: D(id), stage: 'Negotiation/Review' })).statusCode, 200, id);
     assert.deepEqual(mailed.map((m) => [m.to, m.subject]), [[KAREN.email, 'stageChanged']], 'REGRESSION: a deal with no owner emailed the member its name names; an inactive or a placeholder one emailed');
+});
+
+// ── SLACK ────────────────────────────────────────────────────────────────────
+
+test('SLACK: the stage post\'s Rep line is the deal\'s owner by their name now — never the name the deal carries; a deal with no owner "Unassigned" (state §0.307)', async () => {
+    posted.length = 0;
+    for (const id of ['ann', 'ina', 'pia', 'nobody', 'blank']) assert.equal((await put(BOB, { id: D(id), stage: 'Proposal' })).statusCode, 200, id);
+    assert.deepEqual(posted.map((p) => [p.after?.id, p.rep]), [[D('ann'), ANN.name], [D('ina'), INA.name], [D('pia'), PIA.name], [D('nobody'), 'Unassigned'], [D('blank'), KAREN.name]],
+        'REGRESSION (§0.307): the Rep line printed the name the deal carries — a renamed owner\'s old one, the name a deal with no owner carries, none for a deal carrying none');
+    assert.ok(posted.every((p) => p.orgId === A && p.mover === BOB.name), 'in its own org, moved by the caller');
 });
 
 // ── CREATED ──────────────────────────────────────────────────────────────────

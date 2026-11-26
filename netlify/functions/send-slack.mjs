@@ -102,13 +102,15 @@ export async function sendSlackToOrg(orgId, { text, blocks }, alertType) {
  * Post what a deal save changed — a stage change, or a win — the moment it
  * happens, per the org's own selection (slackConfig.alerts). Jeff: the
  * company decides what posts; a rep's preferences never gate it. Never throws;
- * returns the types that posted. `before` may be null for a create.
+ * returns the types that posted. `before` may be null for a create. `rep` is the
+ * deal's owner by their name now (`ownerLabel`, _dealMail.mjs — state §0.307).
  */
-export async function postDealEvents(orgId, { before, after, mover } = {}) {
+export async function postDealEvents(orgId, { before, after, mover, rep } = {}) {
     const posted = [];
     for (const ev of dealSlackEvents({ before, after })) {
         const ctx = { mover: mover || 'Someone',   // the caller's member name — never the deal's rep (state §0.305)
-            repName: after?.salesRep || '—', dealName: after?.opportunityName || after?.account || 'Unnamed deal', account: after?.account || '—', arr: after?.arr, fromStage: ev.from, toStage: ev.to };
+            repName: rep || '—',   // the deal's owner by their name now, handed in (state §0.307) — never the name the deal carries
+            dealName: after?.opportunityName || after?.account || 'Unnamed deal', account: after?.account || '—', arr: after?.arr, fromStage: ev.from, toStage: ev.to };
         ctx.opportunityId = after?.id; ctx.orgId = orgId;   // the post's button opens the deal (state §0.237)
         const msg = ev.type === 'dealClosedWon' ? slackTemplates.dealWon(ctx) : slackTemplates.stageChanged(ctx);
         if (await sendSlackToOrg(orgId, msg, ev.type)) posted.push(ev.type);

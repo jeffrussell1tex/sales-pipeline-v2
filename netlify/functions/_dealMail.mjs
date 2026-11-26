@@ -14,3 +14,11 @@ export const mailsOwner = (deal, actorId) => !!deal?.ownerId && !ownAct(deal.own
 
 // The row to mail: the deal's owner, of this org, active, with an address that is no placeholder — else none.
 export const ownerToMail = (deal, row, orgId) => (!!row && !!deal?.ownerId && row.id === deal.ownerId && row.orgId === orgId && reachable(row) ? row : null);
+
+// Who a post names as the deal's rep (state §0.307): its owner by their name now — a label, so a member of this org whatever their
+// status or address; "Unassigned" for a deal with no owner, or one whose owner is no member here; "—" for a member with no name.
+// Never the name the deal carries, which a rename leaves behind.
+export const ownerLabel = (deal, row, orgId) => {
+    if (!deal?.ownerId || !row || row.id !== deal.ownerId || row.orgId !== orgId) return 'Unassigned';
+    return String(row.name ?? '').trim() || '—';
+};
