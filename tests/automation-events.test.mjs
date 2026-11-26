@@ -181,21 +181,28 @@ test('updateFieldPatch: an allowlist (18b34) — never orgId, ownerId, stage or 
 
 test('the engine refuses an unknown trigger, builds the task from the shared module, stamps ownership from THIS org\'s roster, and scopes every write', () => {
     const s = code(read('netlify/functions/dispatch-automations.mjs'));
-    assert.ok(s.includes("import { resolveOwnerId, rosterUserById } from './_lib.mjs';"));
+    assert.ok(s.includes("import { resolveOwnerId } from './_lib.mjs';"));
     assert.ok(s.includes("} from '../../src/utils/automationEvents.js';"));
     assert.ok(s.includes('        if (!isAutomationTrigger(triggerEvent)) {'), 'fail closed on a trigger outside the vocabulary');
     assert.ok(s.includes('if (!isAutomationTrigger(triggerEvent))') && s.indexOf('if (!isAutomationTrigger(triggerEvent))') < s.indexOf('.from(automations)'), 'before any read');
     // create_task
     assert.ok(s.includes('            const row = taskFromAction(action, triggerEvent, data);'));
-    assert.ok(s.includes('                    ownerId = await resolveOwnerId(row.assignedTo, orgId);'), 'the assignee\'s id from the org roster');
+    assert.ok(s.includes('                    const named = await resolveOwnerId(row.assignedTo, orgId);'), 'the assignee\'s id from the org roster');
+    // The member a typed name finds owns the task only while active here, read again by id (state §0.308).
+    assert.ok(s.includes("                    const member = named ? await ownerRowOf(named, orgId) : null;\n                    if (named === null) note = `no user named \"${row.assignedTo}\" — task left unassigned`;\n                    else if (member && member.active !== false) ownerId = member.id;\n                    else gone = `\"${row.assignedTo}\" is not an active member here`;"), 'REGRESSION: a deactivated member given the task by name');
+    // One the rule names who is not active hands it to the record's owner while active, else none — said either way (Jeff, 26 Nov: "B").
+    assert.ok(s.includes("            if (gone || (!byId && !row.assignedTo)) {\n                row.assignedTo = null;\n                const member = data.owner_id ? await ownerRowOf(data.owner_id, orgId) : null;\n                if (member && member.active !== false) {\n                    ownerId = member.id; row.assignedTo = member.name;\n                    if (gone) note = `${gone} — task given to the record's owner`;\n                }"), 'the record\'s owner, by the §0.305 rule');
+    assert.ok(s.includes("                else if (!data.owner_id) note = gone ? `${gone}, and the record has no owner — task left unassigned` : 'the record has no owner — task left unassigned';\n                else note = gone ? `${gone}, nor is the record's owner — task left unassigned` : 'the record\\'s owner is not an active member here — task left unassigned';"), 'said on the run');
     assert.ok(s.includes("                    if (!e?.ambiguous) throw e;"), 'an ambiguous name is reported, not guessed');
     assert.ok(s.includes('            await db.insert(tasks).values({ ...row, ownerId, orgId, createdAt: new Date(), updatedAt: new Date() });'));
     assert.ok(!/account:\s+data\.account/.test(s) && !/notes:\s+p\.notes/.test(s), 'the two keys tasks has no column for are gone');
     // send_email
     // A blank To or Assign-to: the record's owner, by app id, read again in THIS org (§0.305) — never a name.
+    // The blank Assign-to's block is the one a rule's inactive assignee hands on through since §0.308 — pinned above, and held once,
+    // as §0.305 held it.
+    assert.equal(s.split('                const member = data.owner_id ? await ownerRowOf(data.owner_id, orgId) : null;\n').length - 1, 1, 'one hand-on block');
     for (const x of ['            const who = mailRecipient(triggerEvent, p, data);\n            if (who.skip) return { type: \'send_email\', status: \'skipped\', reason: who.skip };\n            const member = who.to ? null : await ownerRowOf(who.ownerId, orgId);\n            const to = who.to || ownerToMail({ ownerId: who.ownerId }, member, orgId)?.email;\n            if (!to) return { type: \'send_email\', status: \'skipped\', reason: !member ? \'the record\\\'s owner is not a member here\' : member.active === false ? \'the record\\\'s owner is not an active member here\' : \'the record\\\'s owner has no address to send to\' };',
-        "async function ownerRowOf(ownerId, orgId) {\n    const [row] = await db.select({ id: users.id, orgId: users.orgId, name: users.name, email: users.email, active: users.active })\n        .from(users).where(and(eq(users.id, ownerId), eq(users.orgId, orgId)));\n    return row || null;",
-        "            else if (!data.owner_id) note = 'the record has no owner — task left unassigned';\n            else {\n                const member = await ownerRowOf(data.owner_id, orgId);\n                if (member && member.active !== false) { ownerId = member.id; row.assignedTo = member.name; }\n                else note = 'the record\\'s owner is not an active member here — task left unassigned';\n            }"]) assert.equal(s.split(x).length - 1, 1, x);
+        "async function ownerRowOf(ownerId, orgId) {\n    const [row] = await db.select({ id: users.id, orgId: users.orgId, name: users.name, email: users.email, active: users.active })\n        .from(users).where(and(eq(users.id, ownerId), eq(users.orgId, orgId)));\n    return row || null;"]) assert.equal(s.split(x).length - 1, 1, x);
     assert.ok(!/repEmail|data\.sales_rep|eq\(users\.name/.test(s), 'REGRESSION: a recipient by name');
     assert.ok(s.includes("                html: `<p>${escapeHtml(body).replace(/\\r?\\n/g, '<br>')}</p>`,"), 'the body is escaped');
     assert.ok(s.includes('const subject = renderMerge(p.subject ||') && s.includes('const body    = renderMerge(p.body ||'), 'merge fields in subject and body');
@@ -339,9 +346,11 @@ test('the panel picks the assignee from the roster and stores both keys; the eng
     assert.ok(s.includes('setAssignee={setAssignee} roster={roster} fields={conditionFields(trigger)}/>)}'));
     assert.ok(s.includes("{a.type==='create_task' && a.params?.assignedTo && <span style={{ fontSize:12, color:T.inkMuted }}>→ {a.params.assignedTo}</span>}"), 'the review names the assignee');
     const e = code(read('netlify/functions/dispatch-automations.mjs'));
-    assert.ok(e.includes("import { resolveOwnerId, rosterUserById } from './_lib.mjs';"));
-    assert.ok(e.includes('            const byId = action.params?.assignedToId ? await rosterUserById(action.params.assignedToId, orgId) : null;'), 'the id is looked up in the EVENT\'S org');
-    assert.ok(e.includes('            if (byId) { ownerId = byId.id; row.assignedTo = byId.name; }'), 'owned by id, the name refreshed from the roster');
+    assert.ok(e.includes("import { resolveOwnerId } from './_lib.mjs';"));
+    // Read again by id in the EVENT'S org, fresh (ownerRowOf), and owned only while active (state §0.308).
+    assert.ok(e.includes("            const pickedId = String(action.params?.assignedToId ?? '').trim();\n            const byId = pickedId ? await ownerRowOf(pickedId, orgId) : null;\n            let gone = null;   // why the assignee the rule names cannot take it"), 'the id is looked up in the EVENT\'S org; none gone until one is');
+    assert.ok(e.includes('            if (byId && byId.active !== false) { ownerId = byId.id; row.assignedTo = byId.name; }'), 'owned by id, the name refreshed from the row');
+    assert.ok(e.includes("            else if (byId) gone = 'the rule\\'s assignee is not an active member here';"), 'REGRESSION: a deactivated member given the task the rule picked them for');
     assert.ok(e.includes('            else if (row.assignedTo) {'), 'the name path is the fallback');
     const l = code(read('netlify/functions/_lib.mjs'));
     assert.ok(l.includes('export async function rosterUserById(id, orgId) {'));

@@ -288,3 +288,34 @@ test('a blank To and a blank Assign-to reach the record\'s OWNER, by app id (§0
     await dispatchAutomations(A, 'lead.converted', leadEventData({ id: 'lead_itest_auto_n', firstName: 'No', email: null, assignedTo: 'Anna Oldname', ownerId: ANNA }));
     assert.deepEqual(sent.map(m => m.to), ['mo@prospect.test', 'anna@itest.local']);
 });
+
+test('a rule\'s PICKED member owns the task only while an active member here — by id or by a typed name; one who is not hands it to the record\'s owner while active, else it is unassigned; said on the run (§0.308; Jeff, 26 Nov: "B")', async () => {
+    const INA = 'usr_itest_auto_ina';   // deactivated, seeded by the test above
+    await db.insert(automations).values([
+        { id: 'auto_itest_A_pickina', orgId: A, name: 'Picked Ina', triggerEvent: 'lead.created', conditions: [], actions: [{ type: 'create_task', params: { title: 'Picked {{first_name}}', assignedToId: INA, assignedTo: 'Ina Gone', dueOffsetDays: 0 } }], active: true, runCount: 0 },
+        { id: 'auto_itest_A_typedina', orgId: A, name: 'Typed Ina', triggerEvent: 'lead.created', conditions: [], actions: [{ type: 'create_task', params: { title: 'Typed {{first_name}}', assignedTo: 'Ina Gone', dueOffsetDays: 0 } }], active: true, runCount: 0 },
+    ]);
+    const fire = async (id, first, ownerId) => {
+        await dispatchAutomations(A, 'lead.created', { id, first_name: first, ...(ownerId ? { owner_id: ownerId } : {}) });
+        const all = await tasksIn(A), said = async (rule) => ((await runsFor(A, rule)).find(r => r.triggeredBy === id)?.error || '');
+        return { picked: all.find(r => r.title === `Picked ${first}`), typed: all.find(r => r.title === `Typed ${first}`), pickedSaid: await said('auto_itest_A_pickina'), typedSaid: await said('auto_itest_A_typedina') };
+    };
+    // The record's owner is an active member: the task is theirs, by their name now, and the run says why.
+    const ken = await fire('lead_itest_auto_ken', 'Ken', KAREN_A);
+    assert.deepEqual([ken.picked?.ownerId, ken.picked?.assignedTo], [KAREN_A, 'Karen Rep'], 'REGRESSION (§0.308): a deactivated member was given the task the rule picked them for');
+    assert.deepEqual([ken.typed?.ownerId, ken.typed?.assignedTo], [KAREN_A, 'Karen Rep'], 'REGRESSION (§0.308): a deactivated member was given the task by their typed name');
+    assert.match(ken.pickedSaid, /the rule's assignee is not an active member here — task given to the record's owner/);
+    assert.match(ken.typedSaid, /"Ina Gone" is not an active member here — task given to the record's owner/);
+    // The record has no owner, or its owner is not active either: unassigned, its name cleared, and said.
+    const ivy = await fire('lead_itest_auto_ivy', 'Ivy', null);
+    assert.deepEqual([ivy.picked?.ownerId, ivy.picked?.assignedTo, ivy.typed?.ownerId, ivy.typed?.assignedTo], [null, null, null, null], 'no owner: unassigned, never the deactivated member\'s');
+    assert.match(ivy.pickedSaid, /the rule's assignee is not an active member here, and the record has no owner — task left unassigned/);
+    assert.match(ivy.typedSaid, /"Ina Gone" is not an active member here, and the record has no owner — task left unassigned/);
+    const ida = await fire('lead_itest_auto_ida', 'Ida', INA);
+    assert.deepEqual([ida.picked?.ownerId, ida.picked?.assignedTo, ida.typed?.ownerId, ida.typed?.assignedTo], [null, null, null, null], 'an inactive owner: unassigned');
+    assert.match(ida.typedSaid, /"Ina Gone" is not an active member here, nor is the record's owner — task left unassigned/);
+    assert.match(ida.pickedSaid, /the rule's assignee is not an active member here, nor is the record's owner — task left unassigned/);
+    // An active member picked by id still owns it, by their name now (§0.126) — the record's owner is not asked.
+    const byId = (await tasksIn(A)).find(r => r.title === 'Id Ida');
+    assert.deepEqual([byId?.ownerId, byId?.assignedTo], [KAREN_A, 'Karen Rep']);
+});

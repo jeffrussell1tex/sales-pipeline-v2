@@ -209,8 +209,10 @@ const isoDate = (d) => isoLocal(new Date(d));
 
 /**
  * The task row a create_task action produces for this event — everything but
- * orgId and ownerId, which the engine stamps: the picker's member, the rule's
- * name in the org's roster, else the record's owner by app id (state §0.305).
+ * orgId and ownerId, which the engine stamps: the picker's member, or the member
+ * the rule's name finds, while an active member here; else — or with no name —
+ * the record's owner by app id while active, else none, said on the run (state
+ * §0.305, §0.308). The engine then sets assignedTo to whoever it stamps.
  *   - title / notes are rendered with the event's merge fields
  *   - dueOffsetDays: whole days from now (0 = today); blank or negative → no due date
  *   - assignedTo: the rule's name, or none — the engine then gives the task to the record's owner, by app id (state §0.305)
@@ -320,9 +322,11 @@ export const conditionText = (field, v) => (field === 'forecast_category' ? cate
 // ── The task action's assignee (state §0.126) ────────────────────────────────
 // The panel picks the assignee from the org's roster and stores BOTH the
 // user's id and their name: the engine owns the task by the id when that id
-// is in the EVENT'S org (rename-proof, never ambiguous) and falls back to the
-// name — the §0.124 contract — otherwise, so a rule saved before the picker,
-// or one whose user has left, behaves as it did.
+// is an ACTIVE member of the EVENT'S org (rename-proof, never ambiguous); a
+// member there who is not active hands it to the record's owner while active,
+// else none, said on the run (state §0.308); an id of no member here falls back
+// to the name — the §0.124 contract — so a rule saved before the picker behaves
+// as it did.
 
 /** A saved name with no single roster match is kept as a `name:` value so the select never blanks a rule. */
 const nameValue = (name) => 'name:' + name;

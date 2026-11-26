@@ -365,7 +365,8 @@ One commit per verified batch; doc patch in the same commit.
 - The deals endpoint's emails (created, note, stage move, close, edit) go to the deal's owner by app id — active, an address that is no
   placeholder — never to the name the deal carries, never of their own act, greeted by their name now (§0.304, guide §18b147;
   `_dealMail.mjs`); an automation's blank To is a lead's own address, else the record's owner by app id (reachable; `mailRecipient`,
-  `ownerToMail`), and its blank Assign-to the record's owner while an active member (§0.305) — an automation does not skip the owner's
+  `ownerToMail`), and its blank Assign-to the record's owner while an active member (§0.305) — an assignee it names who is not
+  active hands the task on the same way, else unassigned, said on the run (§0.308; Jeff: "B") — an automation does not skip the owner's
   own act: the rule is the switch. The alert job alerts a deal whose owner is an active member, whatever name it carries, greeting
   them by their name now; it, the renewal notices and the digests mail only a member who can be reached — a deal whose active owner
   has no real address is still logged, posted, handed to the rules and copied to the manager (§0.306). Slack's mover is the caller or "Someone", its Rep line the deal's owner by their name now

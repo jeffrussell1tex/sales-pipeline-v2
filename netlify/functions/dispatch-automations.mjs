@@ -17,11 +17,14 @@
  * must not silently match a rule saved under another name).
  *
  * Org scoping: the rules are read by orgId, the run log and every action
- * write carry orgId, and the assignee's ownerId is resolved in THIS org's
- * roster. A blank To is a lead's own address, else the record's owner; a blank
- * assignee is the record's owner while an active member here (state §0.305): the
- * payload's owner_id — built by the server from the stored row — read again by
- * id in THIS org, so another org's id is a miss.
+ * write carry orgId, and the assignee's ownerId is resolved in THIS org. A blank
+ * To is a lead's own address, else the record's owner; a blank assignee is the
+ * record's owner while an active member here (state §0.305): the payload's
+ * owner_id — built by the server from the stored row — read again by id in THIS
+ * org, so another org's id is a miss. A picked assignee, or the member a typed
+ * name finds, is read again by id too and owns the task only while active here;
+ * one who is not hands it to the record's owner by that same rule, else it is
+ * unassigned — said on the run either way (state §0.308; Jeff, 26 Nov: "B").
  */
 
 import { db }          from '../../db/index.js';
@@ -29,7 +32,7 @@ import { automations, automationRuns, tasks, opportunities, users } from '../../
 import { eq, and }     from 'drizzle-orm';
 import { sendEmail }   from './send-email.mjs';
 import { sendSlackToOrg, slackTemplates } from './send-slack.mjs';
-import { resolveOwnerId, rosterUserById } from './_lib.mjs';
+import { resolveOwnerId } from './_lib.mjs';
 // Who an automation's email with no To reaches: the record's owner, by app id (state §0.305; the deal emails' rule, §0.304).
 import { ownerToMail } from './_dealMail.mjs';
 import {
@@ -64,8 +67,9 @@ const evalConditions = (conditions, data) => {
 const escapeHtml = (s) => String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-// The record's owner, by app id, in THIS org (state §0.305) — a member, whatever their status; none for an id of no member
-// here. A failed read throws: the action is an error on the run, nothing sent or made in its place. Until §0.305 a blank To
+// A member by app id, in THIS org, read fresh — the record's owner (state §0.305), a rule's picked assignee or the member a typed
+// name finds (state §0.308): whatever their status, which the caller asks; none for an id of no member here. A failed read
+// throws: the action is an error on the run, nothing sent or made in its place. Until §0.305 a blank To
 // went to the member bearing the record's rep NAME: after a rename, to nobody or to whoever took the old name.
 async function ownerRowOf(ownerId, orgId) {
     const [row] = await db.select({ id: users.id, orgId: users.orgId, name: users.name, email: users.email, active: users.active })
@@ -84,26 +88,39 @@ const executeAction = async (action, orgId, triggerEvent, data, rule = {}) => {
             const row = taskFromAction(action, triggerEvent, data);
             let ownerId = null;
             let note = null;
-            // The picker's id first (state §0.126): owned by that user when the id
-            // is in THIS org's roster — rename-proof, never ambiguous; an id from
-            // any other org is a miss and the name path below decides.
-            const byId = action.params?.assignedToId ? await rosterUserById(action.params.assignedToId, orgId) : null;
-            if (byId) { ownerId = byId.id; row.assignedTo = byId.name; }
+            // The picker's id first (state §0.126): owned by that member when the id
+            // is a member of THIS org — rename-proof, never ambiguous; an id from
+            // any other org is a miss and the name path below decides. Read again by
+            // id, fresh: a picked member, or one a typed name finds, owns the task
+            // only while active here (state §0.308).
+            const pickedId = String(action.params?.assignedToId ?? '').trim();
+            const byId = pickedId ? await ownerRowOf(pickedId, orgId) : null;
+            let gone = null;   // why the assignee the rule names cannot take it
+            if (byId && byId.active !== false) { ownerId = byId.id; row.assignedTo = byId.name; }
+            else if (byId) gone = 'the rule\'s assignee is not an active member here';
             else if (row.assignedTo) {
                 try {
-                    ownerId = await resolveOwnerId(row.assignedTo, orgId);
-                    if (ownerId === null) note = `no user named "${row.assignedTo}" — task left unassigned`;
+                    const named = await resolveOwnerId(row.assignedTo, orgId);
+                    const member = named ? await ownerRowOf(named, orgId) : null;
+                    if (named === null) note = `no user named "${row.assignedTo}" — task left unassigned`;
+                    else if (member && member.active !== false) ownerId = member.id;
+                    else gone = `"${row.assignedTo}" is not an active member here`;
                 } catch (e) {
                     if (!e?.ambiguous) throw e;
                     note = `"${row.assignedTo}" is ambiguous in this workspace — task left unowned`;
                 }
             }
-            // No assignee named: the record's owner, by app id, while an active member here (state §0.305).
-            else if (!data.owner_id) note = 'the record has no owner — task left unassigned';
-            else {
-                const member = await ownerRowOf(data.owner_id, orgId);
-                if (member && member.active !== false) { ownerId = member.id; row.assignedTo = member.name; }
-                else note = 'the record\'s owner is not an active member here — task left unassigned';
+            // No assignee named — or the one named is not an active member here (state §0.308; Jeff, 26 Nov: "B"): the record's
+            // owner, by app id, while an active member here (state §0.305); else unassigned. Said on the run either way.
+            if (gone || (!byId && !row.assignedTo)) {
+                row.assignedTo = null;
+                const member = data.owner_id ? await ownerRowOf(data.owner_id, orgId) : null;
+                if (member && member.active !== false) {
+                    ownerId = member.id; row.assignedTo = member.name;
+                    if (gone) note = `${gone} — task given to the record's owner`;
+                }
+                else if (!data.owner_id) note = gone ? `${gone}, and the record has no owner — task left unassigned` : 'the record has no owner — task left unassigned';
+                else note = gone ? `${gone}, nor is the record's owner — task left unassigned` : 'the record\'s owner is not an active member here — task left unassigned';
             }
             await db.insert(tasks).values({ ...row, ownerId, orgId, createdAt: new Date(), updatedAt: new Date() });
             return { type: 'create_task', status: 'ok', taskId: row.id, note };

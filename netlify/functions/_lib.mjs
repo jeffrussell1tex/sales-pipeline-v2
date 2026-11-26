@@ -238,8 +238,10 @@ async function orgRoster(orgId) {
 
 /**
  * The roster row (id, name, email) with this app id in THIS org, else null
- * (state §0.126 — the automation picker's assignee). An id from another org
- * is a miss, never a lookup across orgs.
+ * (state §0.126). An id from another org is a miss, never a lookup across orgs.
+ * Read through the 30 s roster cache: the account and contact restores and
+ * importerOwners. The automation engine read a rule's picked assignee here
+ * until §0.308; it reads it fresh by id now (dispatch-automations.mjs ownerRowOf).
  */
 export async function rosterUserById(id, orgId) {
     if (!orgId) throw new Error('_lib.rosterUserById: orgId is required.');
