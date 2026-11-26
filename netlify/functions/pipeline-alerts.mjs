@@ -45,6 +45,9 @@ import { dealEventData, taskEventData }               from '../../src/utils/auto
 import { buildRenewalQueue }                          from '../../src/utils/planVisits.js';
 // The win chance's fall into Critical, the score-drop alert's rule and words (AI scoring batch 2C).
 import { fellToCritical, managerCopied, fallWords }   from '../../src/utils/dealScore.js';
+// Each org's own stages (state §0.303): momentum is said of a deal short of its org's last two open stages.
+import { funnelInOrg }                                from './_links.mjs';
+import { commitStagesOf }                             from '../../src/utils/stages.js';
 
 const DEDUP_DAYS = 7;
 
@@ -232,6 +235,14 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
         const activeOpps = allOpps.filter(o =>
             o.stage !== 'Closed Won' && o.stage !== 'Closed Lost' && o.salesRep
         );
+        // Each org's last two open stages (state §0.303), read once, when a deal of it is first a momentum candidate. A read that
+        // fails is never the app's list in its place: that org's momentum is not said, every other alert and org goes on, and the
+        // run answers 500 counting the orgs (guide §18b138 rule 4). An org with no saved list has the app's.
+        const lateByOrg = new Map(), unreadOrgs = new Set();
+        const lateStagesOf = (org) => {
+            if (!lateByOrg.has(org)) lateByOrg.set(org, funnelInOrg(org).then((list) => new Set(commitStagesOf({ funnelStages: list }))));
+            return lateByOrg.get(org);
+        };
 
         let emailsSent = 0;
         let smsSent    = 0;
@@ -426,9 +437,13 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
             }
 
             // ── Signal 4: High-velocity deal (positive) ───────────────────────
+            let late = null;
+            if (createdDays !== null && createdDays <= 14 && stageCount >= 2) {
+                try { late = await lateStagesOf(orgId); }
+                catch (err) { unreadOrgs.add(orgId); console.error(`pipeline-alerts: the stages of ${orgId} could not be read:`, err.message); }
+            }
             if (
-                createdDays !== null && createdDays <= 14 && stageCount >= 2 &&
-                !['Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'].includes(opp.stage)
+                late && !late.has(opp.stage)
             ) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'velocity');
                 if (!alerted) {
@@ -636,6 +651,8 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
 
         const summary = `${emailsSent} emails sent (${renewalsSent} renewals), ${smsSent} SMS sent, ${overdueFired} overdue-task rules fired, ${skipped} skipped (dedup)`;
         console.log('pipeline-alerts: complete —', summary);
+        // An org whose stages could not be read had no momentum said: the run says so (state §0.303).
+        if (unreadOrgs.size) return { statusCode: 500, body: JSON.stringify({ emailsSent, smsSent, overdueFired, skipped, error: `momentum not judged for ${unreadOrgs.size} org(s): their stages could not be read` }) };
         return { statusCode: 200, body: JSON.stringify({ emailsSent, smsSent, overdueFired, skipped }) };
 
     } catch (err) {

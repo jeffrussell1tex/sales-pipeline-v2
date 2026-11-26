@@ -78,9 +78,9 @@ export const REQUESTS = {
     ],
     'mention-sms': [
         { what: "a text about another rep's deal", method: 'POST', userId: REP, body: { type: 'dealAssigned', recordId: 'x1' }, rows: deal(OTHERS) },
-        { what: "a text about the caller's own deal (here: texts are off, skipped)", method: 'POST', userId: REP, body: { type: 'dealAssigned', recordId: 'x1' }, rows: deal(MINE) },
+        { what: "a text about the caller's own deal (skipped, a 200)", method: 'POST', userId: REP, body: { type: 'dealAssigned', recordId: 'x1' }, rows: deal(MINE) },
         { what: "a text about another rep's task", method: 'POST', userId: REP, body: { type: 'taskAssigned', recordId: 'x1' }, rows: task(OTHERS) },
-        { what: "a text about the caller's own task (here: texts are off, skipped)", method: 'POST', userId: REP, body: { type: 'taskAssigned', recordId: 'x1' }, rows: task(MINE) },
+        { what: "a text about the caller's own task (skipped, a 200)", method: 'POST', userId: REP, body: { type: 'taskAssigned', recordId: 'x1' }, rows: task(MINE) },
     ],
     duplicates: [
         { what: 'the on-create look is for those who may read the CRM (a Technician, none)', method: 'GET', userId: REP, qs: { mode: 'create', entityType: 'account', name: 'Acme' }, rows: { users, accounts: [{ id: 'a1', orgId: 'org_a', name: 'Acme', ownerId: OTHERS }] } },

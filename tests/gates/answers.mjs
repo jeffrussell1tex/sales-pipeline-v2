@@ -493,9 +493,9 @@ export const ANSWERS = {
         plain: { GET: "x x x x x x x x", POST: ". . . disp tech ro unk out", PUT: "x x x x x x x x", PATCH: "x x x x x x x x", DELETE: "x x x x x x x x", HEAD: "x x x x x x x x" },
         aimed: [
             ["a text about another rep's deal", "200 200 own disp tech ro unk out"],
-            ["a text about the caller's own deal (here: texts are off, skipped)", "200 200 200 disp tech ro unk out"],
+            ["a text about the caller's own deal (skipped, a 200)", "200 200 200 disp tech ro unk out"],
             ["a text about another rep's task", "200 200 own disp tech ro unk out"],
-            ["a text about the caller's own task (here: texts are off, skipped)", "200 200 200 disp tech ro unk out"],
+            ["a text about the caller's own task (skipped, a 200)", "200 200 200 disp tech ro unk out"],
         ],
     },
     'netlify/functions/merge.mjs': {

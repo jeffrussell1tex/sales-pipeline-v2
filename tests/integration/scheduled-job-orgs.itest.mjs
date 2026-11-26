@@ -62,11 +62,20 @@ mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.m
     namedExports: { dispatchAutomations: async (orgId, trigger, data) => { fired.push({ orgId, trigger, data }); } },
 });
 
+// An org's stage list that cannot be read (state §0.303): that org's momentum is not said; the run goes on and answers 500 at
+// the end.
+const links = await import('../../netlify/functions/_links.mjs');
+let listFails = false;
+mock.module(new URL('../../netlify/functions/_links.mjs', import.meta.url).href, {
+    namedExports: { ...links, funnelInOrg: async (org) => { if (listFails && org === ORG_FAIL) throw new Error('itest: the stage list read failed'); return links.funnelInOrg(org); } },
+});
+const ORG_FAIL = 'itest_alerts_A';
+
 const { runPipelineAlerts } = await import('../../netlify/functions/pipeline-alerts.mjs');
 const { runDigest } = await import('../../netlify/functions/digest.mjs');
 const { runTaskReminders } = await import('../../netlify/functions/task-reminders.mjs');
 const { db } = await import('../../db/index.js');
-const { users, opportunities, activities, tasks, automations, recommendationLog } = await import('../../db/schema.js');
+const { users, opportunities, activities, tasks, automations, recommendationLog, settings } = await import('../../db/schema.js');
 const { inArray } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
 
@@ -124,6 +133,12 @@ const DEALS = [
     // 25 days in Qualification against org B's average (300 days): not stuck.
     deal('b_slow', ORG_B, B_KAREN, 'Bravo Slow Deal', { stage: 'Qualification', arr: '45000', createdDate: day(-60), stageChangedDate: day(-25) }),
     // Org B's history: Qualification took 300 days.
+    // Momentum (§0.303): a new deal moved twice is said, but not in the org's own last two open stages — org A's list is its
+    // own (Lead in, Demo, Bid, Signed), org B has none and the app's (Negotiation/Review, Contracts).
+    deal('a_mom_late',  ORG_A, A_DANA, 'Alpha Fast Signed',   { stage: 'Signed',    arr: '0', createdDate: day(-5), stageChangedDate: day(-1), stageHistory: [{ stage: 'Demo', prevStage: 'Lead in', date: day(-4) }, { stage: 'Signed', prevStage: 'Demo', date: day(-1) }] }),
+    deal('a_mom_early', ORG_A, A_DANA, 'Alpha Fast Demo',     { stage: 'Demo',      arr: '0', createdDate: day(-5), stageChangedDate: day(-1), stageHistory: [{ stage: 'Demo', prevStage: 'Lead in', date: day(-4) }, { stage: 'Demo', prevStage: 'Bid', date: day(-1) }] }),
+    deal('b_mom_late',  ORG_B, B_BRAM, 'Bravo Fast Contracts', { stage: 'Contracts', arr: '0', createdDate: day(-5), stageChangedDate: day(-1), stageHistory: [{ stage: 'Proposal', prevStage: 'Discovery', date: day(-4) }, { stage: 'Contracts', prevStage: 'Proposal', date: day(-1) }] }),
+    deal('b_mom_early', ORG_B, B_BRAM, 'Bravo Fast Proposal',  { stage: 'Proposal',  arr: '0', createdDate: day(-5), stageChangedDate: day(-1), stageHistory: [{ stage: 'Discovery', prevStage: 'Qualification', date: day(-4) }, { stage: 'Proposal', prevStage: 'Discovery', date: day(-1) }] }),
     deal('b_won', ORG_B, B_BRAM, 'Bravo Won Deal', { stage: 'Closed Won', arr: '99000', createdDate: '2025-02-01', wonDate: '2025-12-15', stageHistory: [{ stage: 'Proposal', prevStage: 'Qualification', date: '2025-11-28' }] }),
 ];
 const dealId = (k) => `opp_itest_alerts_${k}`;
@@ -149,7 +164,7 @@ const TASKS = [
 const RULES = ORGS.map(org => ({ id: `auto_itest_alerts_${org}`, orgId: org, name: 'Overdue nudge', triggerEvent: 'task.overdue', active: true }));
 
 const cleanup = async () => {
-    for (const t of [recommendationLog, automations, tasks, activities, opportunities, users]) {
+    for (const t of [recommendationLog, automations, tasks, activities, opportunities, users, settings]) {
         await db.delete(t).where(inArray(t.orgId, ORGS));
     }
 };
@@ -162,6 +177,7 @@ before(async () => {
     await db.insert(activities).values(ACTS);
     await db.insert(tasks).values(TASKS);
     await db.insert(automations).values(RULES);
+    await db.insert(settings).values({ id: ORG_A, orgId: ORG_A, extra: { funnelStages: [{ name: 'Lead in', weight: 10 }, { name: 'Demo', weight: 30 }, { name: 'Bid', weight: 60 }, { name: 'Signed', weight: 90 }, { name: 'Closed Won', weight: 100 }, { name: 'Closed Lost', weight: 0 }] } });
 });
 
 after(async () => { await cleanup(); });
@@ -191,6 +207,26 @@ const sorted = (a) => [...a].sort();
 
 let alertMails = [], alertPosts = [], alertFired = [];
 
+test('pipeline-alerts: an org\'s stage list that cannot be read says no momentum of that org — never the app\'s list in its place; every other alert and org goes on, the run a 500 counting it', async () => {
+    reset();
+    listFails = true;
+    let r;
+    try { r = await runPipelineAlerts({ now: NOW }); } finally { listFails = false; }
+    assert.equal(r.statusCode, 500, r.body);
+    assert.match(JSON.parse(r.body).error, /momentum not judged for 1 org\(s\)/);
+    const said = received(mails);
+    assert.deepEqual([said[A_DANA.email], said[B_BRAM.email]], [['closeDateLapsed: Alpha Team Deal'], ['dealMomentum: Bravo Fast Proposal']], 'org A\'s momentum alone is not said');
+    assert.ok(said[A_KAREN.email].includes('dealStuck: Alpha Stuck Deal'), 'its other alerts are');
+    assert.equal(fired.filter(f => f.trigger === 'task.overdue' && ORGS.includes(f.orgId)).length, 2, 'the overdue scan runs');
+    // The run after it, its list read: what was said is not said again; org A's momentum now is.
+    reset();
+    const again = await runPipelineAlerts({ now: NOW });
+    assert.equal(again.statusCode, 200, again.body);
+    assert.deepEqual(received(mails), { [A_DANA.email]: ['dealMomentum: Alpha Fast Demo'] });
+    // Cleared, so the next test runs as the first of the hour.
+    await db.delete(recommendationLog).where(inArray(recommendationLog.orgId, ORGS));
+});
+
 test('pipeline-alerts: each deal\'s alerts go to its OWNER and that org\'s manager — never to the other org\'s Karen Russell or Maya Manager', async () => {
     reset();
     const r = await runPipelineAlerts({ now: NOW });
@@ -198,11 +234,12 @@ test('pipeline-alerts: each deal\'s alerts go to its OWNER and that org\'s manag
     alertMails = [...mails]; alertPosts = [...posts]; alertFired = [...fired];
     assert.deepEqual(received(alertMails), {
         [A_KAREN.email]: ['closeDateLapsed: Alpha Lapsed Deal', 'dealSilent: Alpha Silent Deal', 'dealStuck: Alpha Stuck Deal'],
-        [A_DANA.email]:  ['closeDateLapsed: Alpha Team Deal'],
+        [A_DANA.email]:  ['closeDateLapsed: Alpha Team Deal', 'dealMomentum: Alpha Fast Demo'],
         [A_MAYA.email]:  ['managerDealAlert: Alpha Lapsed Deal', 'managerDealAlert: Alpha Silent Deal', 'managerDealAlert: Alpha Stuck Deal', 'managerDealAlert: Alpha Team Deal'],
         [B_KAREN.email]: ['closeDateLapsed: Bravo Lapsed Deal'],
+        [B_BRAM.email]:  ['dealMomentum: Bravo Fast Proposal'],
         [B_MAYA.email]:  ['managerDealAlert: Bravo Lapsed Deal'],
-    }, 'REGRESSION (§0.159): by display name, one org\'s Karen Russell was skipped and a Manager could be sent the other org\'s deal');
+    }, 'REGRESSION (§0.159; §0.303: momentum by each org\'s own last two open stages — org A\'s Signed deal was said): by display name, one org\'s Karen Russell was skipped and a Manager could be sent the other org\'s deal');
     assertNothingCrosses(alertMails);
 });
 
@@ -227,6 +264,7 @@ test('pipeline-alerts: the company\'s Slack post, the rules engine and the ledge
     assert.deepEqual(sorted(mine.map(p => `${p.orgId} ${p.type}: ${p.msg.detail.dealName}`)), sorted([
         `${ORG_A} closeLapsed: Alpha Lapsed Deal`, `${ORG_A} dealStuck: Alpha Stuck Deal`, `${ORG_A} dealSilent: Alpha Silent Deal`,
         `${ORG_A} closeLapsed: Alpha Team Deal`, `${ORG_B} closeLapsed: Bravo Lapsed Deal`,
+        `${ORG_A} dealMomentum: Alpha Fast Demo`, `${ORG_B} dealMomentum: Bravo Fast Proposal`,
     ]));
     const ids = { [ORG_A]: new Set([...DEALS, ...TASKS].filter(r => r.orgId === ORG_A).map(r => r.id)), [ORG_B]: new Set([...DEALS, ...TASKS].filter(r => r.orgId === ORG_B).map(r => r.id)) };
     const rules = alertFired.filter(f => ORGS.includes(f.orgId));
@@ -235,11 +273,12 @@ test('pipeline-alerts: the company\'s Slack post, the rules engine and the ledge
         `${ORG_A} opportunity.close_lapsed ${dealId('a_lapsed')}`, `${ORG_A} opportunity.stuck ${dealId('a_stuck')}`,
         `${ORG_A} opportunity.silent ${dealId('a_silent')}`, `${ORG_A} opportunity.close_lapsed ${dealId('a_team')}`,
         `${ORG_B} opportunity.close_lapsed ${dealId('b_lapsed')}`,
+        `${ORG_A} opportunity.momentum ${dealId('a_mom_early')}`, `${ORG_B} opportunity.momentum ${dealId('b_mom_early')}`,
         `${ORG_A} task.overdue task_itest_alerts_a_overdue`, `${ORG_B} task.overdue task_itest_alerts_b_overdue`,
     ]));
     const ledger = await db.select().from(recommendationLog).where(inArray(recommendationLog.orgId, ORGS));
     for (const row of ledger) assert.ok(ids[row.orgId].has(row.opportunityId), `ledger row in ${row.orgId} names ${row.opportunityId}`);
-    assert.equal(ledger.length, 7, 'four deal signals and one overdue task in org A; one deal signal and one overdue task in org B');
+    assert.equal(ledger.length, 9, 'five deal signals and one overdue task in org A; two deal signals and one overdue task in org B');
 });
 
 test('pipeline-alerts: an overdue task fires its OWN org\'s rule for its owner — both orgs\', though both assignees are called Karen Russell', () => {

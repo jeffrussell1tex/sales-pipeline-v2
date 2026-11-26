@@ -18,6 +18,7 @@ import {
 } from '../src/utils/slackAlerts.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
+const count = (s, x) => s.split(x).length - 1;
 const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//')).join('\n');
 
 // ── the pure module ──────────────────────────────────────────────────────────
@@ -112,7 +113,11 @@ test("the five hourly signals fire on the signal alone; the rep's preference gat
     assert.ok(s.includes('            if (daysSilent !== null && daysSilent >= 14) {'), 'silent');
     assert.ok(s.includes('            if (daysInStage !== null && daysInStage >= stuckThreshold && daysInStage >= 14) {'), 'stuck');
     assert.ok(s.includes('            if (daysLapsed !== null && daysLapsed > 0) {'), 'lapsed');
-    assert.ok(s.includes("                !['Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'].includes(opp.stage)\n            ) {"), 'momentum');
+    // Momentum: short of its own org's last two open stages (state §0.303), each org read once, settling on its own.
+    for (const x of ["            let late = null;\n            if (createdDays !== null && createdDays <= 14 && stageCount >= 2) {\n                try { late = await lateStagesOf(orgId); }\n                catch (err) { unreadOrgs.add(orgId);", "                late && !late.has(opp.stage)\n            ) {",
+        "if (!lateByOrg.has(org)) lateByOrg.set(org, funnelInOrg(org).then((list) => new Set(commitStagesOf({ funnelStages: list }))));\n            return lateByOrg.get(org);",
+        "        if (unreadOrgs.size) return { statusCode: 500, body: JSON.stringify({ emailsSent, smsSent, overdueFired, skipped, error: `momentum not judged for ${unreadOrgs.size} org(s): their stages could not be read` }) };\n        return { statusCode: 200,"]) assert.equal(count(s, x), 1, x);
+    assert.ok(!/funnelInOrg\([^)]*\)\s*\.catch/.test(s), 'never a default in its place');
     // A fall into Critical since AI scoring batch 2C (Jeff, 17 Nov, Q1): the signal alone, no preference in it.
     assert.ok(s.includes('            if (fellToCritical(winScore, now.getTime() - 86400000)) {'), 'score drop');
     assert.ok(!/&& wantsAlert\(resolvedProfile/.test(s), "REGRESSION: a rep's preference gates the company's post");

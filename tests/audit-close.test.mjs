@@ -28,7 +28,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { MENTION_EVENTS, lastMoveOf } from '../netlify/functions/_mentions.mjs';
+import { MENTION_EVENTS, lastMoveOf, ownAct, movedByAnother } from '../netlify/functions/_mentions.mjs';
 import { techJobRefs } from '../netlify/functions/_techJobs.mjs';
 
 const ROOT = new URL('../', import.meta.url);
@@ -58,6 +58,15 @@ test('MENTION_EVENTS: four events, each about a deal or a task — any other is 
     assert.ok(Object.isFrozen(MENTION_EVENTS));
 });
 
+test('ownAct: the record\'s owner is the caller, by app id, both known (state §0.303)', () => {
+    assert.equal(ownAct('usr_a', 'usr_a'), true);
+    for (const [o, c] of [['usr_a', 'usr_b'], [null, null], [undefined, undefined], ['', ''], ['usr_a', null], [null, 'usr_a'], [0, 0]]) assert.equal(ownAct(o, c), false, `${o} ${c}`);
+    // A move another made (its author's id), not this caller's.
+    const by = (authorId, stage = 'Proposal', more = {}) => ({ stage: 'Proposal', stageHistory: [{ stage: 'Lead', prevStage: 'x', authorId: 'usr_z' }, { stage, prevStage: 'Lead', authorId, ...more }] });
+    assert.deepEqual([movedByAnother(by('usr_b'), 'usr_a'), movedByAnother(by('usr_a'), 'usr_a'), movedByAnother(by(null), 'usr_a'), movedByAnother(by(undefined), 'usr_a'), movedByAnother(by(''), 'usr_a'), movedByAnother(by('usr_b', 'Lead'), 'usr_a'), movedByAnother(by('usr_b'), null)], [true, false, false, false, false, false, true]);
+    for (const odd of [null, {}, { stage: 'P' }, { stage: 'P', stageHistory: 'x' }, { stage: 'P', stageHistory: [null] }, { stage: 'P', stageHistory: ['P'] }, { stageHistory: [{ stage: undefined, authorId: 'u' }] }]) assert.equal(movedByAnother(odd, 'usr_a'), false, JSON.stringify(odd));
+});
+
 test('lastMoveOf: the deal’s own last move into the stage it is in — else no text', () => {
     const history = [{ stage: 'Discovery', prevStage: 'Lead' }, { stage: 'Proposal', prevStage: 'Discovery' }];
     assert.deepEqual(lastMoveOf({ stage: 'Proposal', stageHistory: history }), { fromStage: 'Discovery', toStage: 'Proposal' });
@@ -73,7 +82,7 @@ test('lastMoveOf: the deal’s own last move into the stage it is in — else no
 
 test('mention-sms: the body names the event and the record — nothing else is read from it', () => {
     const s = code(read('netlify/functions/mention-sms.mjs'));
-    assert.ok(s.includes("import { MENTION_EVENTS, lastMoveOf } from './_mentions.mjs';"));
+    assert.ok(s.includes("import { MENTION_EVENTS, lastMoveOf, ownAct, movedByAnother } from './_mentions.mjs';"));
     assert.ok(!/const MENTION_EVENTS|function lastMoveOf/.test(s), 'one definition');
     assert.equal(count(s, 'event.body'), 1);
     assert.ok(s.includes("const { type, recordId } = JSON.parse(event.body || '{}');"));
@@ -101,7 +110,18 @@ test('mention-sms: to the record’s owner by id, borne out by the record, signe
     assert.ok(!s.includes('users.name'), 'REGRESSION: the recipient found by name');
     assert.ok(s.includes("if (type === 'dealClosedWon' && record.stage !== 'Closed Won') {"), 'a win is a won deal');
     assert.ok(s.includes('move = lastMoveOf(record);'), 'a stage change is the deal’s own last move');
-    assert.ok(s.includes("const by       = (await getCallerName(userId, orgId)) || 'Someone';"), 'signed by the server');
+    assert.ok(s.includes("const by       = me.name || 'Someone';") && !s.includes('getCallerName'), 'signed by the server, from the one read of the caller');
+    // Never of their own act (state §0.303): the caller read and decided on after the owner is known, before the owner's row and the text.
+    const mine = "        const me = await resolveCaller(userId, orgId);\n        if (ownAct(record.ownerId, me.id)) return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'own_act' }) };\n";
+    assert.equal(count(s, mine), 1, 'REGRESSION: a member texted about their own act');
+    before(s, unassigned, 'const me = await resolveCaller(userId, orgId);', 'an unassigned record is said as unassigned');
+    before(s, "skipped: 'own_act'", 'eq(users.id, record.ownerId)', 'decided before the owner is read');
+    before(s, "skipped: 'own_act'", 'await sendSms(', 'before the text');
+    const theirs = "        if ((type === 'stageChanged' || type === 'dealClosedWon') && movedByAnother(record, me.id)) return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'not_their_move' }) };\n";
+    assert.equal(count(s, theirs), 1, 'REGRESSION: a move another made told as this caller\'s');
+    before(s, "skipped: 'own_act'", "skipped: 'not_their_move'", 'one of their own first');
+    before(s, "skipped: 'not_their_move'", 'eq(users.id, record.ownerId)', 'before the owner is read');
+    assert.ok(s.includes("import { serverErrorBody, resolveCaller, assertOwnership } from './_lib.mjs';"));
     assert.ok(s.includes('return { statusCode: 200, headers, body: JSON.stringify({ success: true, type }) };'));
     assert.ok(!s.includes('to: normalizedPhone })'), 'REGRESSION: the answer carried the recipient’s phone number');
     assert.equal(count(s, 'normalizedPhone'), 3, 'normalised, checked, sent — never answered');

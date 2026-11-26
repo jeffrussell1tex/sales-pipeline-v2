@@ -24,9 +24,10 @@ const ORG = { funnelStages: LIST };
 // Where a deal's category and the stages it falls back to are named (state §0.301): the rule (stages.js, stageOrder.js); the
 // best-case stage in the Forecast view's words (PipelineTab); the commit stages in the List's words; the window's press, its
 // touched mark, what it leaves out and a new deal's none; an automation's payload, the field a rule may set and the value a
-// condition asks for; a report's filter; the public API's answer; the column.
+// condition asks for; a report's filter; the momentum alert's last two open stages (pipeline-alerts.mjs, state §0.303); the public
+// API's answer; the column.
 const CATEGORY_READS = {
-    'netlify/functions/opportunities.mjs': 2, 'netlify/functions/public-api.mjs': 1, 'src/Tabs/PipelineTab.jsx': 2, 'src/components/ListView.jsx': 2,
+    'netlify/functions/opportunities.mjs': 2, 'netlify/functions/pipeline-alerts.mjs': 2, 'netlify/functions/public-api.mjs': 1, 'src/Tabs/PipelineTab.jsx': 2, 'src/components/ListView.jsx': 2,
     'src/components/modals/OpportunityModal.jsx': 4, 'src/utils/automationEvents.js': 5, 'src/utils/reportQuery.js': 1, 'src/utils/stageOrder.js': 2, 'src/utils/stages.js': 9,
 };
 const APP = ['Qualification', 'Discovery', 'Evaluation (Demo)', 'Proposal', 'Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'];
@@ -359,7 +360,6 @@ const APP_NAMES = ['Prospecting', 'Qualification', 'Discovery', 'Evaluation (Dem
 const NAMED = {
     'src/utils/constants.js': "the app's own list, and the demo deals of an old sample",
     'src/utils/settingsDefaults.js': 'the seed a workspace starts with — the same list (above)',
-    'netlify/functions/pipeline-alerts.mjs': 'the momentum alert leaves out the last two of the app\'s own — filed (OPEN_ITEMS §4.5, left by §0.299)',
 };
 function stagesWritten(text) {
     const s = text.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');

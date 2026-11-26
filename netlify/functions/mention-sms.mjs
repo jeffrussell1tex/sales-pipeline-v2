@@ -16,7 +16,8 @@
  *
  * POST body: { type: 'dealAssigned' | 'stageChanged' | 'dealClosedWon' | 'taskAssigned', recordId }
  * Called fire-and-forget from the browser hooks (useOpportunities, useTasks)
- * after a successful save.
+ * after a successful save. A member is never texted about their own act (state
+ * §0.303): the record's owner is the caller, by app id.
  */
 
 import { db } from '../../db/index.js';
@@ -26,8 +27,8 @@ import { users, opportunities, tasks } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
-import { serverErrorBody, getCallerName, assertOwnership } from './_lib.mjs';
-import { MENTION_EVENTS, lastMoveOf } from './_mentions.mjs';
+import { serverErrorBody, resolveCaller, assertOwnership } from './_lib.mjs';
+import { MENTION_EVENTS, lastMoveOf, ownAct, movedByAnother } from './_mentions.mjs';
 
 export const handler = async (event) => {
     const headers = {
@@ -79,6 +80,10 @@ export const handler = async (event) => {
 
         // The recipient is the record's owner — an id, never a name.
         if (!record.ownerId) return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'unassigned' }) };
+        // Never of their own act (state §0.303): the caller is read and decided on — a read that fails is a 500, nothing sent.
+        const me = await resolveCaller(userId, orgId);
+        if (ownAct(record.ownerId, me.id)) return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'own_act' }) };
+        if ((type === 'stageChanged' || type === 'dealClosedWon') && movedByAnother(record, me.id)) return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'not_their_move' }) };
         const [user] = await db.select().from(users)
             .where(and(eq(users.id, record.ownerId), eq(users.orgId, orgId)));
         if (!user) return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'user_not_found' }) };
@@ -108,7 +113,7 @@ export const handler = async (event) => {
 
         // Every word below is the server's: the record's stored fields, the
         // recipient's roster name, the caller's roster name.
-        const by       = (await getCallerName(userId, orgId)) || 'Someone';
+        const by       = me.name || 'Someone';
         const repName  = user.name || 'there';
         const dealName = record.opportunityName || record.account || 'a deal';
         let body;

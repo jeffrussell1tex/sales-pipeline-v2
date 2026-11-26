@@ -355,10 +355,13 @@ One commit per verified batch; doc patch in the same commit.
   create naming none takes the org's default, a settings save drops none with open deals (THE GUARD,
   tests/pipelines.test.mjs).
 - A deal's stage is one of its org's (§0.299, guide §18b142): the list and what is read off it are read through src/utils/stages.js, over stageOrder.js, the
-  server's too; no open stage's name decides on a deal in code (three files named; colours go by name still); on the deals endpoint a stage named anew that the
+  server's too; no open stage's name decides on a deal in code (two files named — the app's own list; colours go by name still); on the deals endpoint a stage named anew that the
   org lacks is refused, a create naming none takes the first; the settings save drops none a deal is in, and a rename (an entry's `was`, the stored name) carries its deals,
   their history, the automations, the saved reports and the deal model in its own batch (§0.302, guide §18b145; `_stageRename.mjs`); a deal's single save that moves no stage
   writes none, nor what follows one it does not name (THE GUARD, tests/stages.test.mjs).
+- The hourly alert job reads each org's stage list through the deals endpoint's reader (`funnelInOrg`), once per org; a failed read is never
+  the app's list — that org's momentum is not said, the run a 500 (§0.303, guide §18b146). A member is never texted about their own act
+  (`ownAct`, by app id), nor about another's move as the caller's where the move names its author (`movedByAnother`).
 - A deal's probability is none or a whole 0–100 (§0.300, guide §18b143; src/utils/dealProbability.js): a 400 otherwise; a single save's move that names none
   takes the stage's default unless the rep set their own, a close its own; on the app's screens one with none counts and reads at its stage's default
   (`countedProbability`); an edit sends the stage, what follows it, and the probability only once pressed or typed in its window, or once a save naming the

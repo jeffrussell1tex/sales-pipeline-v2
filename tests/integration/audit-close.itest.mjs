@@ -99,6 +99,7 @@ const WHO = {
     reader: { user: 'clerk_itest_aclose_reader', role: 'ReadOnly' },
     tess:   { user: 'clerk_itest_aclose_tess',   role: 'Technician' },
     nobody: { user: 'clerk_itest_aclose_nobody', role: 'Technician' },   // no technician row
+    ghost:  { user: 'clerk_itest_aclose_ghost',  role: 'Admin' },        // no member row
 };
 const call = async (name, who, method, body, qs, extraHeaders = {}) => {
     const res = await FN[name]({
@@ -255,12 +256,34 @@ test('the mention text: a stage change is the deal\'s own last move; a win must 
     assert.equal(notWon.body.skipped, 'not_won', 'a deal in Proposal is no win to announce');
     const stale = await call('mention-sms', WHO.admin, 'POST', { type: 'stageChanged', recordId: 'opp_itest_aclose_stale' });
     assert.equal(stale.body.skipped, 'no_stage_change', 'its last recorded move is not into the stage it is in');
-    const task = await call('mention-sms', WHO.pat, 'POST', { type: 'taskAssigned', recordId: 'task_itest_aclose_pat' });
+    const task = await call('mention-sms', WHO.admin, 'POST', { type: 'taskAssigned', recordId: 'task_itest_aclose_pat' });
     assert.equal(task.status, 200);
     assert.equal(texts.at(-1).to, '+15550000001');
-    assert.ok(texts.at(-1).body.includes('Patricia Close assigned you a task — "Call the buyer"'), 'signed with the caller\'s roster name, the stored title');
+    assert.ok(texts.at(-1).body.includes('Ada Close assigned you a task — "Call the buyer"'), 'signed with the caller\'s roster name, the stored title');
     assert.ok(texts.at(-1).body.includes('/?open=task&id=task_itest_aclose_pat&org=itest_aclose_A'), 'its link opens the task, in its org (§0.237)');
     assert.equal(texts.length, 2);
+});
+
+test('the mention text never tells a member of their own act — by app id, every event; nor of a move another made; one with no member row is not the owner (§0.303)', async () => {
+    texts.length = 0;
+    for (const [who, type, recordId] of [[WHO.pat, 'taskAssigned', 'task_itest_aclose_pat'], [WHO.pat, 'dealAssigned', 'opp_itest_aclose_pat'], [WHO.pat, 'stageChanged', 'opp_itest_aclose_pat'], [WHO.twin, 'dealClosedWon', 'opp_itest_aclose_twin']]) {
+        const own = await call('mention-sms', who, 'POST', { type, recordId });
+        assert.deepEqual([own.status, own.body.skipped], [200, 'own_act'], `REGRESSION: Pat was texted about her own ${type}`);
+    }
+    assert.equal(texts.length, 0, 'nothing sent');
+    const ghost = await call('mention-sms', WHO.ghost, 'POST', { type: 'dealAssigned', recordId: 'opp_itest_aclose_pat' });
+    assert.equal(ghost.status, 200, JSON.stringify(ghost.body));
+    assert.equal(JSON.parse(texts[0].body.replace(/^ASSIGNED /, '')).assignedBy, 'Someone', 'a caller with no member row is nobody\'s own act; signed as the emails sign it');
+    // Pat's own move, which an Admin's save that moved nothing would report as the Admin's.
+    const [held] = await db.select().from(opportunities).where(eq(opportunities.id, 'opp_itest_aclose_pat'));
+    const authored = (authorId) => db.update(opportunities).set({ stageHistory: held.stageHistory.map((h, i, all) => (i === all.length - 1 ? { ...h, authorId } : h)) }).where(eq(opportunities.id, held.id));
+    await authored('usr_itest_aclose_pat');
+    const theirs = await call('mention-sms', WHO.admin, 'POST', { type: 'stageChanged', recordId: held.id });
+    assert.deepEqual([theirs.status, theirs.body.skipped, texts.length], [200, 'not_their_move', 1], 'REGRESSION: Pat texted that the Admin moved her deal, which she moved');
+    await authored('usr_itest_aclose_admin');
+    assert.equal((await call('mention-sms', WHO.admin, 'POST', { type: 'stageChanged', recordId: held.id })).status, 200);
+    assert.equal(texts.length, 2, 'the Admin\'s own move is told');
+    await db.update(opportunities).set({ stageHistory: held.stageHistory }).where(eq(opportunities.id, held.id));
 });
 
 test('the mention text is refused to a read-only member, to one who could not have saved the record, and for another org\'s record', async () => {
