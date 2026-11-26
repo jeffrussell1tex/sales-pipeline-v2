@@ -87,7 +87,7 @@ built; it never holds a commit, and it must print `Baseline: green.` first
 survivor is fixed in its own commit first. Before each prod ship: the full
 run, `node scripts/mutate-import.mjs`, every entry — about 4-5 h
 (§0.254: each mutant graded by its likely tests first, guide §18b129; 6,727
-entries in 4 h 05 min, 22 Nov; a scoped run of 7,380 in 4 h 46 min, 25 Nov).
+entries in 4 h 05 min, 22 Nov; a scoped run of 6,935 in 4 h 54 min, 26 Nov).
 Then: rep-path browser check signed in as Karen (`accelerep@outlook.com`,
 role `User`) — Admin skips every ownership and role branch, so an Admin-only
 pass proves nothing. Read the URL bar and count the orgs before any browser
