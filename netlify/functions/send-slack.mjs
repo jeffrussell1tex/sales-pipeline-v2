@@ -107,7 +107,8 @@ export async function sendSlackToOrg(orgId, { text, blocks }, alertType) {
 export async function postDealEvents(orgId, { before, after, mover } = {}) {
     const posted = [];
     for (const ev of dealSlackEvents({ before, after })) {
-        const ctx = { mover: mover || after?.salesRep || 'Someone', repName: after?.salesRep || '—', dealName: after?.opportunityName || after?.account || 'Unnamed deal', account: after?.account || '—', arr: after?.arr, fromStage: ev.from, toStage: ev.to };
+        const ctx = { mover: mover || 'Someone',   // the caller's member name — never the deal's rep (state §0.305)
+            repName: after?.salesRep || '—', dealName: after?.opportunityName || after?.account || 'Unnamed deal', account: after?.account || '—', arr: after?.arr, fromStage: ev.from, toStage: ev.to };
         ctx.opportunityId = after?.id; ctx.orgId = orgId;   // the post's button opens the deal (state §0.237)
         const msg = ev.type === 'dealClosedWon' ? slackTemplates.dealWon(ctx) : slackTemplates.stageChanged(ctx);
         if (await sendSlackToOrg(orgId, msg, ev.type)) posted.push(ev.type);

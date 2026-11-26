@@ -155,7 +155,7 @@ const EXPECT_THREW = [
     'spiff-claims GET POST PUT', 'tasks DELETE GET POST PUT', 'users PUT',
 ];
 const EXPECT_NAMED = [
-    'api-keys POST', 'audit-log POST', 'backup POST PUT', 'calendar-connections DELETE', 'dispatch-customers DELETE POST PUT',
+    'api-keys POST', 'audit-log POST', 'backup POST PUT', 'quote-pdf POST', 'calendar-connections DELETE', 'dispatch-customers DELETE POST PUT',
     'dispatch-equipment DELETE POST PUT', 'dispatch-jobs DELETE POST PUT', 'dispatch-plan-visits DELETE',
     'dispatch-schedule-blocks DELETE POST PUT', 'dispatch-service-plans DELETE POST PUT', 'dispatch-technicians DELETE POST PUT',
     'dispatch-vehicles DELETE POST PUT', 'invoices DELETE POST PUT', 'opportunities POST', 'quote-to-job POST',

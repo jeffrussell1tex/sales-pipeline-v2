@@ -3648,7 +3648,7 @@ rep's task: `orgId` from the event's org, `ownerId` resolved in THAT org's
 roster by the assignee's name (no match → unowned and said so; ambiguous →
 unowned, reported) — or, since §0.126, by the id the panel's roster picker
 stored, when that id is in the event's org (an id from any other org is a
-miss; the name path then decides); the payload names no owner. Every write the engine makes
+miss; the name path then decides). Since §0.305 a rule with no assignee gives the task to the record's owner — the payload's `owner_id`, built by the server from the stored row and read again by id in the event's org (another org's id is a miss), while an active member there — and a send_email with no To reaches a lead's own address, else that owner (`mailRecipient`, `ownerToMail`), never a name the record carries. Every write the engine makes
 carries the org, so the engine is scanned by the org-scoping test like any
 endpoint — a skip-list entry is a debt, not an exemption. The trigger
 vocabulary is ONE exported list the engine refuses to fire outside of (fail
@@ -4937,13 +4937,13 @@ THE GUARD: tests/failed-reads.test.mjs (every function as every role, the caller
 
 **Origin (§0.304, 26 Nov 2026 — OPEN_ITEMS §4.5; Jeff: "Keep working").** The deal emails went to whoever bore the name the deal carried: a renamed member's to nobody, or to the member who took the old name.
 
-1. **The recipient is the deal's owner, by app id** (`ownerId`), read in the deal's org — never a name the deal carries, which is a label (§18b20). So far the deals endpoint's five emails (created, note, stage move, close, edit); the alert job's and the automations' emails do not yet (OPEN_ITEMS §4.5, left by §0.304 (a), (c), (e)).
+1. **The recipient is the deal's owner, by app id** (`ownerId`), read in the deal's org — never a name the deal carries, which is a label (§18b20). The deals endpoint's five emails (created, note, stage move, close, edit, §0.304). An automation's email with no To follows rules 1 and 3 only — a lead's own address, else the record's owner (lead, task or deal) by app id, reachable; not rules 2, 4 or 5: the Admin's rule is the switch (§0.305, §18b37). The alert job's do not yet (OPEN_ITEMS §4.5, left by §0.304 (c), (e)). A customer's quote PDF names the deal's owner by their name now (§0.305).
 2. **Never of their own act** (`mailsOwner` over `ownAct`, netlify/functions/_dealMail.mjs): the actor by app id — the caller, or a note's author.
 3. **Only to an owner who can be reached**: active, an address that is no placeholder (`reachable`); no owner, no email.
 4. **Greeted by their name now**, not the name the record carried.
 5. **After the save has landed** a failed read or send is logged and sends nothing (§18b138 rule 3).
 
-THE GUARD: tests/five-findings.test.mjs; tests/integration/five-findings.itest.mjs. Left by it: OPEN_ITEMS §4.5.
+THE GUARD: tests/five-findings.test.mjs, tests/automation-events.test.mjs; tests/integration/five-findings.itest.mjs, tests/integration/dispatch-automations.itest.mjs. Left by it: OPEN_ITEMS §4.5.
 
 ## 18b146. A Job Reads Each Org's Own Rules; A Member Is Not Told Of Their Own Act — Nor Of Another's As Theirs (hard rule)
 

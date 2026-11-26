@@ -18,7 +18,10 @@
  *
  * Org scoping: the rules are read by orgId, the run log and every action
  * write carry orgId, and the assignee's ownerId is resolved in THIS org's
- * roster — never taken from the payload.
+ * roster. A blank To is a lead's own address, else the record's owner; a blank
+ * assignee is the record's owner while an active member here (state §0.305): the
+ * payload's owner_id — built by the server from the stored row — read again by
+ * id in THIS org, so another org's id is a miss.
  */
 
 import { db }          from '../../db/index.js';
@@ -27,8 +30,10 @@ import { eq, and }     from 'drizzle-orm';
 import { sendEmail }   from './send-email.mjs';
 import { sendSlackToOrg, slackTemplates } from './send-slack.mjs';
 import { resolveOwnerId, rosterUserById } from './_lib.mjs';
+// Who an automation's email with no To reaches: the record's owner, by app id (state §0.305; the deal emails' rule, §0.304).
+import { ownerToMail } from './_dealMail.mjs';
 import {
-    isAutomationTrigger, renderMerge, taskFromAction, updateFieldPatch, conditionText, eventSubject, triggerOf, dealIdOfEvent,
+    isAutomationTrigger, renderMerge, taskFromAction, updateFieldPatch, conditionText, eventSubject, triggerOf, dealIdOfEvent, mailRecipient,
 } from '../../src/utils/automationEvents.js';
 
 // ── Condition evaluation ──────────────────────────────────────────────────────
@@ -59,16 +64,13 @@ const evalConditions = (conditions, data) => {
 const escapeHtml = (s) => String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-// The email of the org's user with this display name — THIS org's roster only,
-// one active match; two people sharing a name, or nobody, resolve to null (the
-// resolveOwnerId rule: report, never guess).
-async function repEmail(orgId, name) {
-    const wanted = String(name ?? '').trim().toLowerCase();
-    if (!wanted || !orgId) return null;
-    const rows = await db.select({ name: users.name, email: users.email, active: users.active })
-        .from(users).where(eq(users.orgId, orgId));
-    const matches = rows.filter(u => u.active !== false && String(u.name ?? '').trim().toLowerCase() === wanted && u.email);
-    return matches.length === 1 ? matches[0].email : null;
+// The record's owner, by app id, in THIS org (state §0.305) — a member, whatever their status; none for an id of no member
+// here. A failed read throws: the action is an error on the run, nothing sent or made in its place. Until §0.305 a blank To
+// went to the member bearing the record's rep NAME: after a rename, to nobody or to whoever took the old name.
+async function ownerRowOf(ownerId, orgId) {
+    const [row] = await db.select({ id: users.id, orgId: users.orgId, name: users.name, email: users.email, active: users.active })
+        .from(users).where(and(eq(users.id, ownerId), eq(users.orgId, orgId)));
+    return row || null;
 }
 
 // ── Action execution ──────────────────────────────────────────────────────────
@@ -96,18 +98,26 @@ const executeAction = async (action, orgId, triggerEvent, data, rule = {}) => {
                     note = `"${row.assignedTo}" is ambiguous in this workspace — task left unowned`;
                 }
             }
+            // No assignee named: the record's owner, by app id, while an active member here (state §0.305).
+            else if (!data.owner_id) note = 'the record has no owner — task left unassigned';
+            else {
+                const member = await ownerRowOf(data.owner_id, orgId);
+                if (member && member.active !== false) { ownerId = member.id; row.assignedTo = member.name; }
+                else note = 'the record\'s owner is not an active member here — task left unassigned';
+            }
             await db.insert(tasks).values({ ...row, ownerId, orgId, createdAt: new Date(), updatedAt: new Date() });
             return { type: 'create_task', status: 'ok', taskId: row.id, note };
         }
 
         case 'send_email': {
-            // params: { to, subject, body } — a blank "to" goes to the record's
-            // own email (a lead) or to the deal's rep, resolved in this org.
+            // params: { to, subject, body } — a blank "to" goes to a lead's own
+            // address, else the record's owner by app id (state §0.305).
             const p = action.params || {};
-            const to = String(p.to || '').trim()
-                || data.email
-                || await repEmail(orgId, data.sales_rep || data.assigned_to);
-            if (!to) return { type: 'send_email', status: 'skipped', reason: 'no recipient' };
+            const who = mailRecipient(triggerEvent, p, data);
+            if (who.skip) return { type: 'send_email', status: 'skipped', reason: who.skip };
+            const member = who.to ? null : await ownerRowOf(who.ownerId, orgId);
+            const to = who.to || ownerToMail({ ownerId: who.ownerId }, member, orgId)?.email;
+            if (!to) return { type: 'send_email', status: 'skipped', reason: !member ? 'the record\'s owner is not a member here' : member.active === false ? 'the record\'s owner is not an active member here' : 'the record\'s owner has no address to send to' };
             const subject = renderMerge(p.subject || `Automation: ${eventSubject(data) || triggerEvent}`, data);
             const body    = renderMerge(p.body || `Event: ${triggerEvent}`, data);
             await sendEmail({

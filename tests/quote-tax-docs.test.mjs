@@ -184,7 +184,7 @@ test('WIRING: the PDF reads the STORED quote by its id in the caller\'s org, its
     const read1 = f.indexOf('.where(and(eq(quotes.id, String(quoteId)), eq(quotes.orgId, orgId))).limit(1);');
     const access = f.indexOf("if (!(await dealAccess(auth, quote.opportunityId)).canRead) return json(404, { error: 'Quote not found' });");
     const opp = f.indexOf('.where(and(eq(opportunities.id, quote.opportunityId), eq(opportunities.orgId, orgId))).limit(1);');
-    const draw = f.indexOf('const pdfBuffer = await buildPDF(quote, opportunity || null, null, await orgIdentityFor(auth.orgId));');
+    const draw = f.indexOf('const pdfBuffer = await buildPDF(quote, opportunity || null, null, await orgIdentityFor(auth.orgId), owner);');
     assert.ok(read1 > 0 && access > read1 && opp > access && draw > opp, 'the quote in the org, then its deal\'s access, then its deal in the org, then the PDF');
     assert.ok(f.includes("if (!quote) return json(404, { error: 'Quote not found' });"), 'another org\'s quote is a 404');
     const tab = code(read('src/Tabs/QuotesTab.jsx'));

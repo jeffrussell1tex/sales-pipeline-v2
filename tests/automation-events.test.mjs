@@ -16,7 +16,15 @@ import {
     taskFromAction, TASK_PRIORITIES, UPDATABLE_OPPORTUNITY_FIELDS, UPDATABLE_FIELD_OPTIONS, updateFieldPatch,
     dealIdOfEvent, conditionText,
 } from '../src/utils/automationEvents.js';
-import { assigneeOptions, assigneeParams, automationSlackMessage } from '../src/utils/automationEvents.js';
+import { assigneeOptions, assigneeParams, automationSlackMessage, mailRecipient } from '../src/utils/automationEvents.js';
+
+test('mailRecipient (§0.305): a typed To; a lead\'s own address; else the record\'s owner by app id — never a name the record carries', () => {
+    const deal = { sales_rep: 'Karen Rep', owner_id: 'usr_k', email: 'x@forged.test' };
+    assert.deepEqual([mailRecipient('opportunity.won', { to: ' boss@co.test ' }, deal), mailRecipient('opportunity.won', {}, deal), mailRecipient('task.completed', { to: '  ' }, { assigned_to: 'Karen', owner_id: 'usr_t' })], [{ to: 'boss@co.test' }, { ownerId: 'usr_k' }, { ownerId: 'usr_t' }], 'a deal or a task: an email key on it is never the recipient');
+    assert.deepEqual([mailRecipient('lead.created', {}, { email: ' ada@lead.test ', owner_id: 'usr_k' }), mailRecipient('lead.converted', {}, { email: '', owner_id: 'usr_k' }), mailRecipient('lead.created', {}, { email: null })], [{ to: 'ada@lead.test' }, { ownerId: 'usr_k' }, { skip: 'the record has no owner' }]);
+    for (const none of [null, undefined, {}, { sales_rep: 'Karen Rep' }, { assigned_to: 'Karen' }]) assert.deepEqual(mailRecipient('opportunity.won', {}, none), { skip: 'the record has no owner' }, JSON.stringify(none));
+    assert.deepEqual(mailRecipient('opportunity.won', null, deal), { ownerId: 'usr_k' });
+});
 import { isoLocal } from '../src/utils/dateLocal.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -112,7 +120,7 @@ test('taskFromAction: a rendered, deal-linked, rep-assigned task with a due date
     assert.equal(row.description, 'Deal Acme — HVAC moved to Proposal');
     assert.equal(row.dueDate, isoLocal(new Date(now.getTime() + 2 * 86400000)));
     assert.equal(row.priority, 'High');
-    assert.equal(row.assignedTo, 'Karen Rep', 'blank assignee → the deal\'s rep');
+    assert.equal(row.assignedTo, null, 'blank assignee → none here: the engine gives it to the record\'s owner, by app id (§0.305; reversed by design — it was the rep\'s NAME)');
     assert.equal(row.opportunityId, 'o1', 'LINKED to the deal');
     assert.equal(row.relatedTo, 'o1', 'the rail reads relatedTo too');
     assert.equal(row.status, 'Open'); assert.equal(row.completed, false); assert.equal(row.type, 'Follow-up');
@@ -130,10 +138,12 @@ test('taskFromAction: defaults and guards — title from the deal, today for 0, 
     assert.equal(taskFromAction({ params: { assignedTo: ' Manager Mike ' } }, 'opportunity.silent', deal, { now }).assignedTo, 'Manager Mike');
     assert.equal(taskFromAction({ params: { priority: 'Urgent' } }, 'opportunity.silent', deal, { now }).priority, 'Medium');
     assert.deepEqual(TASK_PRIORITIES, ['Low', 'Medium', 'High']);
-    const lead = leadEventData({ id: 'l1', firstName: 'Ada', lastName: 'L', assignedTo: 'Karen Rep' });
+    const lead = leadEventData({ id: 'l1', firstName: 'Ada', lastName: 'L', assignedTo: 'Karen Rep', ownerId: 'usr_l' });
+    assert.equal(lead.owner_id, 'usr_l', 'a lead carries its owner to the engine (§0.305: the default recipient and assignee)');
+    assert.equal(taskEventData({ id: 't9', ownerId: 'usr_t' }).owner_id, 'usr_t', 'and a task its');
     const fromLead = taskFromAction({ params: {} }, 'lead.created', lead, { now });
     assert.equal(fromLead.opportunityId, null, 'a lead is not a deal');
-    assert.equal(fromLead.assignedTo, 'Karen Rep'); assert.equal(fromLead.title, 'Follow up — Ada L');
+    assert.equal(fromLead.assignedTo, null, 'never the lead\'s assignee name (§0.305)'); assert.equal(fromLead.title, 'Follow up — Ada L');
     const fromTask = taskFromAction({ params: {} }, 'task.completed', taskEventData({ id: 't1', title: 'Call', opportunityId: 'o9' }), { now });
     assert.equal(fromTask.opportunityId, 'o9', 'the completed task\'s deal carries over');
     assert.equal(taskFromAction(null, 'opportunity.silent', null, { now }).status, 'Open', 'garbage in, a task out');
@@ -182,9 +192,11 @@ test('the engine refuses an unknown trigger, builds the task from the shared mod
     assert.ok(s.includes('            await db.insert(tasks).values({ ...row, ownerId, orgId, createdAt: new Date(), updatedAt: new Date() });'));
     assert.ok(!/account:\s+data\.account/.test(s) && !/notes:\s+p\.notes/.test(s), 'the two keys tasks has no column for are gone');
     // send_email
-    assert.ok(s.includes('                || await repEmail(orgId, data.sales_rep || data.assigned_to);'), 'a blank To reaches the deal\'s rep');
-    assert.ok(s.includes('        .from(users).where(eq(users.orgId, orgId));'), 'the roster read is org-scoped');
-    assert.ok(s.includes("    return matches.length === 1 ? matches[0].email : null;"), 'exactly one match or nothing');
+    // A blank To or Assign-to: the record's owner, by app id, read again in THIS org (§0.305) — never a name.
+    for (const x of ['            const who = mailRecipient(triggerEvent, p, data);\n            if (who.skip) return { type: \'send_email\', status: \'skipped\', reason: who.skip };\n            const member = who.to ? null : await ownerRowOf(who.ownerId, orgId);\n            const to = who.to || ownerToMail({ ownerId: who.ownerId }, member, orgId)?.email;\n            if (!to) return { type: \'send_email\', status: \'skipped\', reason: !member ? \'the record\\\'s owner is not a member here\' : member.active === false ? \'the record\\\'s owner is not an active member here\' : \'the record\\\'s owner has no address to send to\' };',
+        "async function ownerRowOf(ownerId, orgId) {\n    const [row] = await db.select({ id: users.id, orgId: users.orgId, name: users.name, email: users.email, active: users.active })\n        .from(users).where(and(eq(users.id, ownerId), eq(users.orgId, orgId)));\n    return row || null;",
+        "            else if (!data.owner_id) note = 'the record has no owner — task left unassigned';\n            else {\n                const member = await ownerRowOf(data.owner_id, orgId);\n                if (member && member.active !== false) { ownerId = member.id; row.assignedTo = member.name; }\n                else note = 'the record\\'s owner is not an active member here — task left unassigned';\n            }"]) assert.equal(s.split(x).length - 1, 1, x);
+    assert.ok(!/repEmail|data\.sales_rep|eq\(users\.name/.test(s), 'REGRESSION: a recipient by name');
     assert.ok(s.includes("                html: `<p>${escapeHtml(body).replace(/\\r?\\n/g, '<br>')}</p>`,"), 'the body is escaped');
     assert.ok(s.includes('const subject = renderMerge(p.subject ||') && s.includes('const body    = renderMerge(p.body ||'), 'merge fields in subject and body');
     // update_field
@@ -314,7 +326,7 @@ test('assigneeOptions / assigneeParams: the default, a roster id, a saved name m
     assert.deepEqual(assigneeParams('usr_a', roster), { assignedTo: 'Ann Rep', assignedToId: 'usr_a' }, 'both keys, always');
     assert.deepEqual(assigneeParams('name:Nobody Here', roster), { assignedTo: 'Nobody Here', assignedToId: '' });
     assert.deepEqual(assigneeParams('usr_not_here', roster), { assignedTo: '', assignedToId: '' }, 'an unknown id is never stored');
-    assert.deepEqual(assigneeOptions(null, null).options, [{ value: '', label: "The deal's rep (default)" }]);
+    assert.deepEqual(assigneeOptions(null, null).options, [{ value: '', label: "The record's owner (default)" }]);
 });
 
 test('the panel picks the assignee from the roster and stores both keys; the engine owns by id in THIS org first, then by name', () => {
@@ -437,7 +449,7 @@ test('task.overdue: the payload carries the due date, the priority and the day c
     assert.equal(renderMerge('{{title}} is {{days_overdue}}d overdue (due {{due_date}})', t), 'Call is 4d overdue (due 2026-09-10)');
     const follow = taskFromAction({ params: { title: 'Chase {{title}}' } }, 'task.overdue', t, { now: new Date('2026-09-14T15:00:00Z') });
     assert.equal(follow.opportunityId, 'o1', 'a task created from an overdue task links the same deal');
-    assert.equal(follow.assignedTo, 'Karen Rep', 'and goes to the same assignee by default');
+    assert.equal(follow.assignedTo, null, 'and goes to the overdue task\'s owner by default, by app id — the engine\'s (§0.305)');
 });
 
 test('the hourly job scans overdue tasks for orgs that have a rule, at the assignee\'s alert hour, once per task per week — and nothing else fires for it', () => {

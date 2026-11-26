@@ -106,9 +106,12 @@ export function wrapLines(doc, text, width) {
 // The rep a customer reads is the deal's (Jeff, 16 Nov: "A"): its Sales Rep as stored; who made the quote only when the
 // deal names none. Until then the PDF printed the quote's maker, so a New version a Manager or an Admin made named
 // them to the customer. The maker stays on the app's own screens (the Quotes list).
-export const repOf = (quote, opportunity) => {
+// Since §0.305 the deal's owner by their name now, where the deal has one this org holds (`owner`, read by quote-pdf.mjs) —
+// a renamed owner printed the name they had.
+export const repOf = (quote, opportunity, owner = null) => {
+    const own = owner && opportunity?.ownerId && owner.id === opportunity.ownerId && typeof owner.name === 'string' ? owner.name.trim() : '';
     const rep = typeof opportunity?.salesRep === 'string' ? opportunity.salesRep.trim() : '';
-    return rep || quote?.createdBy || '';
+    return own || rep || quote?.createdBy || '';
 };
 
 // ── PDF builder ───────────────────────────────────────────────────────────────
@@ -116,7 +119,7 @@ export const repOf = (quote, opportunity) => {
 // read back by tests/quote-pdf-pages.test.mjs (the pages) and tests/integration/quote-branding.itest.mjs (the org).
 // `quote` is the STORED quote (quote-pdf.mjs reads it by id in the caller's org, state §0.241); `inputLines` lines to
 // print in place of its own — the handler passes none.
-export function buildPDF(quote, opportunity, inputLines, identity) {
+export function buildPDF(quote, opportunity, inputLines, identity, owner = null) {
     return new Promise((resolve, reject) => {
         const org = identity || { name: '', addressLines: [], phone: '', email: '' };
         const doc = new PDFDocument({
@@ -145,7 +148,7 @@ export function buildPDF(quote, opportunity, inputLines, identity) {
         const { lines, grandTotal, recurringValue, oneTimeValue, avgDisc } = totals;
 
         const oppName  = opportunity ? (opportunity.opportunityName || opportunity.account || '') : '';
-        const repName  = repOf(quote, opportunity);
+        const repName  = repOf(quote, opportunity, owner);
 
         // ── HEADER BAND (page 1) ───────────────────────────────────────────
         // The sending org's address lines, then its phone · email, under the quote name; taller when there are any.

@@ -386,6 +386,12 @@ test('REP: the PDF names the deal\'s rep — a Manager\'s New version never name
     assert.equal(repLine((await render(quoteOf(1), ORG, null))[0]), String.fromCharCode(0x97), 'neither: the dash (WinAnsi 0x97 in the PDF)');
     assert.equal(repOf({ createdBy: 'M' }, { salesRep: ' Karen Rep ' }), 'Karen Rep', 'the stored name, trimmed');
     assert.equal(repOf({}, { salesRep: 42 }), '', 'a rep that is not text is none');
+    // The deal's owner by their name now (§0.305): a renamed owner printed the name they had.
+    const deal = { salesRep: 'Old Name', ownerId: 'usr_k' };
+    assert.deepEqual([repOf({}, deal, { id: 'usr_k', name: ' New Name ' }), repOf({}, deal, { id: 'usr_x', name: 'Another' }), repOf({}, deal, null), repOf({}, deal, { id: 'usr_k', name: '' }), repOf({}, { salesRep: 'S' }, { id: undefined, name: 'Ghost' }), repOf({ createdBy: 'M' }, { ownerId: 'usr_k' }, { id: 'usr_k', name: 42 })], ['New Name', 'Old Name', 'Old Name', 'Old Name', 'S', 'M']);
+    assert.ok(read('netlify/functions/_quotePdf.mjs').includes('        const repName  = repOf(quote, opportunity, owner);'), 'the PDF hands the owner on');
+    const f = read('netlify/functions/quote-pdf.mjs').split('\r\n').join('\n');
+    assert.ok(f.includes("        const owner = opportunity?.ownerId ? await db.select({ id: users.id, name: users.name }).from(users)\n            .where(and(eq(users.id, opportunity.ownerId), eq(users.orgId, orgId))).limit(1).then((r) => r[0] || null, () => null) : null;\n"), 'the owner read in the caller\'s org; a label — a failed read prints the name the deal carries');
 });
 
 test('the suites: this file is graded by the harness', () => {

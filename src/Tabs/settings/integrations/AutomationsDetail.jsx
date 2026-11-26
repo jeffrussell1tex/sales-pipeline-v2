@@ -86,7 +86,7 @@ const ActionEditor = ({ action, idx, actions, setAction, setAssignee, delAction,
             {action.type === 'send_email' && (
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>To (email)</label>
-                        <input value={action.params.to||''} onChange={e => setAction(idx,'to',e.target.value)} placeholder="leave blank = the lead's email, or the deal's rep" style={inp}/></div>
+                        <input value={action.params.to||''} onChange={e => setAction(idx,'to',e.target.value)} placeholder="leave blank = the lead's own email, else the record's owner" style={inp}/></div>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Subject</label>
                         <input value={action.params.subject||''} onChange={e => setAction(idx,'subject',e.target.value)} style={inp}/></div>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Body</label>

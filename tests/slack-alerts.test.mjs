@@ -103,6 +103,9 @@ test('the deal save posts the events the moment a stage changes, naming who move
     const s = code(read('netlify/functions/opportunities.mjs'));
     assert.ok(s.includes("import { postDealEvents, postBulkStageMove } from './send-slack.mjs';"), 'the per-deal poster and, since §0.106, the batch poster');
     assert.ok(s.includes('                await postDealEvents(orgId, { before: { stage: previousStage }, after: upserted, mover: await getCallerName(userId, orgId) });'));
+    // The mover is the caller's member name, or Someone — never the deal's rep (§0.305): with no name known, the rep was said to have moved it.
+    const slack = read('netlify/functions/send-slack.mjs');
+    assert.ok(slack.includes("const ctx = { mover: mover || 'Someone',   // the caller's member name") && !/mover:\s*mover\s*\|\|\s*after\?\.salesRep/.test(slack), 'REGRESSION: the deal\'s rep named as the mover');
     assert.ok(s.includes('if (stageChanged) {') && s.indexOf('await postDealEvents(orgId,') > s.indexOf('if (stageChanged) {'), 'inside the stage-changed branch');
     assert.ok(s.indexOf('await postDealEvents(orgId,') < s.indexOf("const autoEvt = upserted.stage === 'Closed Won'"), 'beside the webhooks, before the automations');
 });

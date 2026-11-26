@@ -16,7 +16,7 @@
  */
 
 import { db } from '../../db/index.js';
-import { quotes, opportunities } from '../../db/schema.js';
+import { quotes, opportunities, users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
@@ -68,7 +68,10 @@ export const handler = async (event) => {
         const [opportunity] = await db.select().from(opportunities)
             .where(and(eq(opportunities.id, quote.opportunityId), eq(opportunities.orgId, orgId))).limit(1);
 
-        const pdfBuffer = await buildPDF(quote, opportunity || null, null, await orgIdentityFor(auth.orgId));
+        // The deal's owner by their name now (state §0.305) — a label: a read that fails prints the name the deal carries.
+        const owner = opportunity?.ownerId ? await db.select({ id: users.id, name: users.name }).from(users)
+            .where(and(eq(users.id, opportunity.ownerId), eq(users.orgId, orgId))).limit(1).then((r) => r[0] || null, () => null) : null;
+        const pdfBuffer = await buildPDF(quote, opportunity || null, null, await orgIdentityFor(auth.orgId), owner);
 
         const filename = (quote.quoteNumber || 'quote') + '-v' + (quote.version || 1) + '.pdf';
 

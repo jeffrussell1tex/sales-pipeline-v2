@@ -364,7 +364,10 @@ One commit per verified batch; doc patch in the same commit.
   (`ownAct`, by app id), nor about another's move as the caller's where the move names its author (`movedByAnother`).
 - The deals endpoint's emails (created, note, stage move, close, edit) go to the deal's owner by app id — active, an address that is no
   placeholder — never to the name the deal carries, never of their own act, greeted by their name now (§0.304, guide §18b147;
-  `_dealMail.mjs`); the alert job's and the automations' do not yet (OPEN_ITEMS §4.5, left by §0.304).
+  `_dealMail.mjs`); an automation's blank To is a lead's own address, else the record's owner by app id (reachable; `mailRecipient`,
+  `ownerToMail`), and its blank Assign-to the record's owner while an active member (§0.305) — an automation does not skip the owner's
+  own act: the rule is the switch. The alert job's do not yet (OPEN_ITEMS §4.5, left by §0.304). Slack's mover is the caller or "Someone"; the quote PDF names the owner by their
+  name now (§0.305).
 - A deal's probability is none or a whole 0–100 (§0.300, guide §18b143; src/utils/dealProbability.js): a 400 otherwise; a single save's move that names none
   takes the stage's default unless the rep set their own, a close its own; on the app's screens one with none counts and reads at its stage's default
   (`countedProbability`); an edit sends the stage, what follows it, and the probability only once pressed or typed in its window, or once a save naming the

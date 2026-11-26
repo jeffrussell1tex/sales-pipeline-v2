@@ -209,11 +209,11 @@ const isoDate = (d) => isoLocal(new Date(d));
 
 /**
  * The task row a create_task action produces for this event — everything but
- * orgId and ownerId, which the engine stamps (ownerId from the org's roster,
- * by the assignee's name; never from the payload).
+ * orgId and ownerId, which the engine stamps: the picker's member, the rule's
+ * name in the org's roster, else the record's owner by app id (state §0.305).
  *   - title / notes are rendered with the event's merge fields
  *   - dueOffsetDays: whole days from now (0 = today); blank or negative → no due date
- *   - assignedTo: the rule's name, else the deal's rep / the lead's assignee
+ *   - assignedTo: the rule's name, or none — the engine then gives the task to the record's owner, by app id (state §0.305)
  *   - a deal event links the task to the deal (opportunityId AND relatedTo —
  *     the rail reads both); a task event carries the deal id it already had
  */
@@ -227,6 +227,16 @@ export function dealIdOfEvent(triggerEvent, data) {
     return triggerOf(triggerEvent)?.entity === 'opportunity' ? (d.id || null) : (d.opportunity_id || null);
 }
 
+// Who a send_email with no To reaches (state §0.305): the rule's address; a lead's own address; else the record's owner, by app id
+// (the engine reads their row in the org and asks `ownerToMail`) — never a name the record carries. → { to } | { ownerId } | { skip }.
+export function mailRecipient(triggerEvent, params, data) {
+    const to = str(params?.to, 320);
+    if (to) return { to };
+    const d = data && typeof data === 'object' ? data : {};
+    if (triggerOf(triggerEvent)?.entity === 'lead' && str(d.email, 320)) return { to: str(d.email, 320) };
+    return d.owner_id ? { ownerId: d.owner_id } : { skip: 'the record has no owner' };
+}
+
 export function taskFromAction(action, triggerEvent, data, { now = new Date(), id } = {}) {
     const p = (action && action.params && typeof action.params === 'object') ? action.params : {};
     const d = data && typeof data === 'object' ? data : {};
@@ -234,7 +244,7 @@ export function taskFromAction(action, triggerEvent, data, { now = new Date(), i
     const title = str(p.title, 500) || `Follow up — ${subject || triggerEvent}`;
     const offset = num(p.dueOffsetDays);
     const dueDate = offset !== null && offset >= 0 ? isoDate(now.getTime() + Math.floor(offset) * 86400000) : null;
-    const assignedTo = str(p.assignedTo, 255) || str(d.sales_rep, 255) || str(d.assigned_to, 255) || null;
+    const assignedTo = str(p.assignedTo, 255) || null;
     const priority = TASK_PRIORITIES.includes(p.priority) ? p.priority : 'Medium';
     const dealId = dealIdOfEvent(triggerEvent, d);
     return {
@@ -318,15 +328,15 @@ export const conditionText = (field, v) => (field === 'forecast_category' ? cate
 const nameValue = (name) => 'name:' + name;
 
 /**
- * → { value, options } for the Assign-to select: '' is the default (the deal's
- * rep or the lead's assignee), a roster id picks that user, and a saved name
+ * → { value, options } for the Assign-to select: '' is the default (the record's
+ * owner, by app id — state §0.305), a roster id picks that user, and a saved name
  * that matches no single active user is offered as itself, "by name".
  */
 export function assigneeOptions(roster, params) {
     const rows = (Array.isArray(roster) ? roster : [])
         .filter(u => u && u.id && u.name && u.active !== false)
         .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }) || String(a.id).localeCompare(String(b.id)));
-    const options = [{ value: '', label: "The deal's rep (default)" }, ...rows.map(u => ({ value: u.id, label: String(u.name) }))];
+    const options = [{ value: '', label: "The record's owner (default)" }, ...rows.map(u => ({ value: u.id, label: String(u.name) }))];
     const p = params && typeof params === 'object' ? params : {};
     const id = str(p.assignedToId, 64);
     const name = str(p.assignedTo, 255);

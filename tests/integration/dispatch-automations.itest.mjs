@@ -234,7 +234,8 @@ test('task.overdue (§0.132): a rule on it creates a follow-up linked to the ove
         conditions: [{ field: 'days_overdue', operator: 'gte', value: 3 }],
         actions: [{ type: 'create_task', params: { title: 'Chase: {{title}} ({{days_overdue}}d late)', dueOffsetDays: 0 } }], active: true, runCount: 0,
     });
-    const overdue = { id: 'task_itest_auto_overdue', title: 'Send SOW', type: 'Follow-up', priority: 'High', assignedTo: 'Karen Rep', dueDate: '2026-09-10', opportunityId: OPP_A, orgId: A };
+    // The job hands the task as stored, its owner with it (§0.305: the default assignee is the record's owner, by app id).
+    const overdue = { id: 'task_itest_auto_overdue', title: 'Send SOW', type: 'Follow-up', priority: 'High', assignedTo: 'Karen Rep', ownerId: KAREN_A, dueDate: '2026-09-10', opportunityId: OPP_A, orgId: A };
     // 2 days late: the condition refuses → a skipped run, no task
     await dispatchAutomations(A, 'task.overdue', taskEventData(overdue, { days_overdue: 2 }));
     assert.equal((await tasksIn(A)).filter(r => r.title.startsWith('Chase:')).length, 0);
@@ -250,4 +251,40 @@ test('task.overdue (§0.132): a rule on it creates a follow-up linked to the ove
     assert.deepEqual(runs.map(r => r.status).sort(), ['skipped', 'success']);
     assert.ok(runs.every(r => r.triggeredBy === 'task_itest_auto_overdue'), 'the run names the task it fired for');
     assert.equal((await tasksIn(B)).length, 0, 'B still has no task');
+});
+
+test('a blank To and a blank Assign-to reach the record\'s OWNER, by app id (§0.305) — never whoever bears the name the record carries; none, inactive or a placeholder: said, never guessed', async () => {
+    const { leadEventData } = await import('../../src/utils/automationEvents.js');
+    const ANNA = 'usr_itest_auto_anna', TAKER = 'usr_itest_auto_taker', INA = 'usr_itest_auto_ina', PIA = 'usr_itest_auto_pia';
+    await db.insert(users).values([
+        { id: ANNA, clerkUserId: 'clerk_' + ANNA, name: 'Anna Newname', email: 'anna@itest.local', role: 'User', orgId: A },
+        { id: TAKER, clerkUserId: 'clerk_' + TAKER, name: 'Anna Oldname', email: 'taker@itest.local', role: 'User', orgId: A },
+        { id: INA, clerkUserId: 'clerk_' + INA, name: 'Ina Gone', email: 'ina@itest.local', role: 'User', orgId: A, active: false },
+        { id: PIA, clerkUserId: 'clerk_' + PIA, name: 'Pia Nomail', email: 'pia@placeholder.local', role: 'User', orgId: A },
+    ]);
+    invalidateRoster(A);
+    const deal = (id, ownerId, salesRep) => ({ id, pipelineId: 'pipe_itest_auto', opportunityName: id, account: 'Acme', salesRep, stage: 'Closed Won', orgId: A, ownerId });
+    await db.insert(opportunities).values([deal('opp_itest_auto_anna', ANNA, 'Anna Oldname'), deal('opp_itest_auto_none', null, 'Karen Rep'), deal('opp_itest_auto_ina', INA, 'Ina Gone'), deal('opp_itest_auto_pia', PIA, 'Pia Nomail')]);
+    await db.insert(automations).values([
+        { id: 'auto_itest_A_won', orgId: A, name: 'Won → mail and task', triggerEvent: 'opportunity.won', conditions: [],
+          actions: [{ type: 'send_email', params: { subject: 'Won {{opportunity_name}}', body: 'b' } }, { type: 'create_task', params: { title: 'Kickoff {{opportunity_name}}', dueOffsetDays: 0 } }], active: true, runCount: 0 },
+        { id: 'auto_itest_A_conv', orgId: A, name: 'Converted → mail', triggerEvent: 'lead.converted', conditions: [], actions: [{ type: 'send_email', params: { subject: 'Lead {{first_name}}', body: 'b' } }], active: true, runCount: 0 },
+    ]);
+    const won = async (id) => { sent.length = 0; const [o] = await db.select().from(opportunities).where(eq(opportunities.id, id)); await dispatchAutomations(A, 'opportunity.won', dealEventData(o, { from_stage: 'Contracts', to_stage: 'Closed Won' })); return (await tasksIn(A)).find(r => r.title === `Kickoff ${id}`); };
+    const ran = async (id) => (await runsFor(A, 'auto_itest_A_won')).find(r => r.triggeredBy === id);
+    const t = await won('opp_itest_auto_anna');
+    assert.deepEqual(sent.map(m => m.to), ['anna@itest.local'], 'REGRESSION: the email went to the member who took the renamed owner\'s old name');
+    assert.deepEqual([t.ownerId, t.assignedTo], [ANNA, 'Anna Newname'], 'the task is hers, by her name now');
+    for (const [id, words] of [['opp_itest_auto_none', /send_email: skipped — the record has no owner/], ['opp_itest_auto_ina', /send_email: skipped — the record's owner is not an active member here/], ['opp_itest_auto_pia', /send_email: skipped — the record's owner has no address to send to/]]) {
+        const task = await won(id);
+        assert.deepEqual(sent, [], `${id}: nothing sent`);
+        assert.match((await ran(id)).error || '', words, `${id}: said on the run`);
+        if (id !== 'opp_itest_auto_pia') assert.deepEqual([task.ownerId, task.assignedTo], [null, null], `${id}: the task unassigned, never the name's member`);
+    }
+    assert.equal((await won('opp_itest_auto_pia')).ownerId, PIA, 'a placeholder address takes the task — it is her deal');
+    // A lead: its own address first; with none, its owner.
+    sent.length = 0;
+    await dispatchAutomations(A, 'lead.converted', leadEventData({ id: 'lead_itest_auto_m', firstName: 'Mo', email: 'mo@prospect.test', assignedTo: 'Anna Oldname', ownerId: ANNA }));
+    await dispatchAutomations(A, 'lead.converted', leadEventData({ id: 'lead_itest_auto_n', firstName: 'No', email: null, assignedTo: 'Anna Oldname', ownerId: ANNA }));
+    assert.deepEqual(sent.map(m => m.to), ['mo@prospect.test', 'anna@itest.local']);
 });
