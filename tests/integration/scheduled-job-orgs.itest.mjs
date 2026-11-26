@@ -105,7 +105,10 @@ const B_KAREN  = member(ORG_B, 'karen',  'Karen Russell', 'User',    'Enterprise
 const B_BRAM   = member(ORG_B, 'bram',   'Bram Bravo',    'User',    'Enterprise');
 const B_MAYA   = member(ORG_B, 'maya',   'Maya Manager',  'Manager', 'Enterprise', { managedReps: ['Karen Russell'] });
 const B_AVERY  = member(ORG_B, 'avery',  'Avery Admin',   'Admin',   null);
-const MEMBERS = [A_KAREN, A_KAREN2, A_DANA, A_MAYA, A_AVERY, B_KAREN, B_BRAM, B_MAYA, B_AVERY];
+// A Manager of org A whose address is a placeholder (§0.306): mailed nothing — no alert, no digest — though she leads the
+// Midmarket team (Karen-two) and has a task due today; her deal is still logged, posted and handed to the rules.
+const A_PIA    = { ...member(ORG_A, 'pia', 'Pia Placeholder', 'Manager', 'Midmarket'), email: 'pia@placeholder.local' };
+const MEMBERS = [A_KAREN, A_KAREN2, A_DANA, A_MAYA, A_AVERY, B_KAREN, B_BRAM, B_MAYA, B_AVERY, A_PIA];
 
 // Every org-A record is named "Alpha …", every org-B record "Bravo …": a message
 // to one org that names the other's is the leak, whatever the people are called.
@@ -133,6 +136,11 @@ const DEALS = [
     // 25 days in Qualification against org B's average (300 days): not stuck.
     deal('b_slow', ORG_B, B_KAREN, 'Bravo Slow Deal', { stage: 'Qualification', arr: '45000', createdDate: day(-60), stageChangedDate: day(-25) }),
     // Org B's history: Qualification took 300 days.
+    // The owner by app id (§0.306): a deal owned and carrying no Sales Rep name is alerted; one carrying a name its owner no
+    // longer has greets them by the name they have; a placeholder owner's deal mails no one.
+    deal('a_noname',   ORG_A, A_DANA, 'Alpha No-name Deal', { salesRep: null, stage: 'Proposal', arr: '0', forecastedCloseDate: day(-10), createdDate: day(-40), stageChangedDate: day(-5) }),
+    deal('a_dana_old', ORG_A, A_DANA, 'Alpha Dana-old Deal', { salesRep: 'Dana Oldname', stage: 'Proposal', arr: '0', forecastedCloseDate: day(-10), createdDate: day(-40), stageChangedDate: day(-5) }),
+    deal('a_pia',      ORG_A, A_PIA, 'Alpha Pia Deal', { stage: 'Proposal', arr: '0', forecastedCloseDate: day(-10), createdDate: day(-40), stageChangedDate: day(-5) }),
     // Momentum (§0.303): a new deal moved twice is said, but not in the org's own last two open stages — org A's list is its
     // own (Lead in, Demo, Bid, Signed), org B has none and the app's (Negotiation/Review, Contracts).
     deal('a_mom_late',  ORG_A, A_DANA, 'Alpha Fast Signed',   { stage: 'Signed',    arr: '0', createdDate: day(-5), stageChangedDate: day(-1), stageHistory: [{ stage: 'Demo', prevStage: 'Lead in', date: day(-4) }, { stage: 'Signed', prevStage: 'Demo', date: day(-1) }] }),
@@ -144,7 +152,7 @@ const DEALS = [
 const dealId = (k) => `opp_itest_alerts_${k}`;
 const act = (id, org, dealKey, date) => ({ id: `act_itest_alerts_${id}`, orgId: org, type: 'Call', date, subject: 'itest', opportunityId: dealId(dealKey) });
 const ACTS = [
-    ...['a_lapsed', 'a_stuck', 'a_team', 'a_karen2', 'b_lapsed', 'b_slow'].map(k => act(k, k.startsWith('a_') ? ORG_A : ORG_B, k, day(-2))),
+    ...['a_lapsed', 'a_stuck', 'a_team', 'a_karen2', 'b_lapsed', 'b_slow', 'a_noname', 'a_dana_old', 'a_pia'].map(k => act(k, k.startsWith('a_') ? ORG_A : ORG_B, k, day(-2))),
     act('a_silent', ORG_A, 'a_silent', day(-30)),
     act('b_names_a_silent', ORG_B, 'a_silent', day(-1)),
 ];
@@ -156,6 +164,7 @@ const TASKS = [
     task('a_today',   ORG_A, A_KAREN,  'Alpha due today',      { dueDate: day(0) }),
     task('a_2pm',     ORG_A, A_KAREN,  'Alpha 2pm call',       { dueDate: day(0), dueTime: '14:00' }),
     task('a_karen2',  ORG_A, A_KAREN2, 'Alpha Karen-two task', { dueDate: day(0) }),
+    task('a_pia',     ORG_A, A_PIA,    'Alpha Pia task',       { dueDate: day(0) }),
     task('b_overdue', ORG_B, B_KAREN,  'Bravo overdue call',   { dueDate: day(-3) }),
     task('b_today',   ORG_B, B_KAREN,  'Bravo due today',      { dueDate: day(0) }),
     task('b_2pm',     ORG_B, B_KAREN,  'Bravo 2pm call',       { dueDate: day(0), dueTime: '14:00' }),
@@ -215,7 +224,7 @@ test('pipeline-alerts: an org\'s stage list that cannot be read says no momentum
     assert.equal(r.statusCode, 500, r.body);
     assert.match(JSON.parse(r.body).error, /momentum not judged for 1 org\(s\)/);
     const said = received(mails);
-    assert.deepEqual([said[A_DANA.email], said[B_BRAM.email]], [['closeDateLapsed: Alpha Team Deal'], ['dealMomentum: Bravo Fast Proposal']], 'org A\'s momentum alone is not said');
+    assert.deepEqual([said[A_DANA.email], said[B_BRAM.email]], [['closeDateLapsed: Alpha Dana-old Deal', 'closeDateLapsed: Alpha No-name Deal', 'closeDateLapsed: Alpha Team Deal'], ['dealMomentum: Bravo Fast Proposal']], 'org A\'s momentum alone is not said');
     assert.ok(said[A_KAREN.email].includes('dealStuck: Alpha Stuck Deal'), 'its other alerts are');
     assert.equal(fired.filter(f => f.trigger === 'task.overdue' && ORGS.includes(f.orgId)).length, 2, 'the overdue scan runs');
     // The run after it, its list read: what was said is not said again; org A's momentum now is.
@@ -234,13 +243,16 @@ test('pipeline-alerts: each deal\'s alerts go to its OWNER and that org\'s manag
     alertMails = [...mails]; alertPosts = [...posts]; alertFired = [...fired];
     assert.deepEqual(received(alertMails), {
         [A_KAREN.email]: ['closeDateLapsed: Alpha Lapsed Deal', 'dealSilent: Alpha Silent Deal', 'dealStuck: Alpha Stuck Deal'],
-        [A_DANA.email]:  ['closeDateLapsed: Alpha Team Deal', 'dealMomentum: Alpha Fast Demo'],
-        [A_MAYA.email]:  ['managerDealAlert: Alpha Lapsed Deal', 'managerDealAlert: Alpha Silent Deal', 'managerDealAlert: Alpha Stuck Deal', 'managerDealAlert: Alpha Team Deal'],
+        [A_DANA.email]:  ['closeDateLapsed: Alpha Dana-old Deal', 'closeDateLapsed: Alpha No-name Deal', 'closeDateLapsed: Alpha Team Deal', 'dealMomentum: Alpha Fast Demo'],
+        [A_MAYA.email]:  ['managerDealAlert: Alpha Dana-old Deal', 'managerDealAlert: Alpha Lapsed Deal', 'managerDealAlert: Alpha No-name Deal', 'managerDealAlert: Alpha Silent Deal', 'managerDealAlert: Alpha Stuck Deal', 'managerDealAlert: Alpha Team Deal'],
         [B_KAREN.email]: ['closeDateLapsed: Bravo Lapsed Deal'],
         [B_BRAM.email]:  ['dealMomentum: Bravo Fast Proposal'],
         [B_MAYA.email]:  ['managerDealAlert: Bravo Lapsed Deal'],
     }, 'REGRESSION (§0.159; §0.303: momentum by each org\'s own last two open stages — org A\'s Signed deal was said): by display name, one org\'s Karen Russell was skipped and a Manager could be sent the other org\'s deal');
     assertNothingCrosses(alertMails);
+    // Greeted by the owner's name now, never the name the deal carries (§0.306).
+    assert.equal(ours(alertMails).find(m => m.detail?.kind === 'closeDateLapsed' && m.detail.dealName === 'Alpha Dana-old Deal').detail.repName, 'Dana Diaz');
+    assert.ok(!JSON.stringify(alertMails).includes('pia@placeholder.local'), 'REGRESSION: a placeholder address mailed — her own deal, or its copy to her as Midmarket\'s manager');
 });
 
 test('pipeline-alerts: a stage\'s average is the org\'s own — org B\'s 300-day history neither silences org A\'s stuck deal nor is lowered by org A\'s', () => {
@@ -264,6 +276,9 @@ test('pipeline-alerts: the company\'s Slack post, the rules engine and the ledge
     assert.deepEqual(sorted(mine.map(p => `${p.orgId} ${p.type}: ${p.msg.detail.dealName}`)), sorted([
         `${ORG_A} closeLapsed: Alpha Lapsed Deal`, `${ORG_A} dealStuck: Alpha Stuck Deal`, `${ORG_A} dealSilent: Alpha Silent Deal`,
         `${ORG_A} closeLapsed: Alpha Team Deal`, `${ORG_B} closeLapsed: Bravo Lapsed Deal`,
+        `${ORG_A} closeLapsed: Alpha No-name Deal`, `${ORG_A} closeLapsed: Alpha Dana-old Deal`,
+        // A placeholder owner's deal is still posted, handed to the rules and logged — only her email is not sent (§0.306).
+        `${ORG_A} closeLapsed: Alpha Pia Deal`,
         `${ORG_A} dealMomentum: Alpha Fast Demo`, `${ORG_B} dealMomentum: Bravo Fast Proposal`,
     ]));
     const ids = { [ORG_A]: new Set([...DEALS, ...TASKS].filter(r => r.orgId === ORG_A).map(r => r.id)), [ORG_B]: new Set([...DEALS, ...TASKS].filter(r => r.orgId === ORG_B).map(r => r.id)) };
@@ -273,12 +288,15 @@ test('pipeline-alerts: the company\'s Slack post, the rules engine and the ledge
         `${ORG_A} opportunity.close_lapsed ${dealId('a_lapsed')}`, `${ORG_A} opportunity.stuck ${dealId('a_stuck')}`,
         `${ORG_A} opportunity.silent ${dealId('a_silent')}`, `${ORG_A} opportunity.close_lapsed ${dealId('a_team')}`,
         `${ORG_B} opportunity.close_lapsed ${dealId('b_lapsed')}`,
+        `${ORG_A} opportunity.close_lapsed ${dealId('a_noname')}`, `${ORG_A} opportunity.close_lapsed ${dealId('a_dana_old')}`,
+        `${ORG_A} opportunity.close_lapsed ${dealId('a_pia')}`,
         `${ORG_A} opportunity.momentum ${dealId('a_mom_early')}`, `${ORG_B} opportunity.momentum ${dealId('b_mom_early')}`,
         `${ORG_A} task.overdue task_itest_alerts_a_overdue`, `${ORG_B} task.overdue task_itest_alerts_b_overdue`,
     ]));
     const ledger = await db.select().from(recommendationLog).where(inArray(recommendationLog.orgId, ORGS));
     for (const row of ledger) assert.ok(ids[row.orgId].has(row.opportunityId), `ledger row in ${row.orgId} names ${row.opportunityId}`);
-    assert.equal(ledger.length, 9, 'five deal signals and one overdue task in org A; two deal signals and one overdue task in org B');
+    assert.equal(ledger.length, 12, 'eight deal signals and one overdue task in org A; two deal signals and one overdue task in org B');
+    assert.ok(ledger.some(l => l.opportunityId === dealId('a_pia') && l.repName === 'Pia Placeholder'), 'REGRESSION (§0.306): a deal whose owner has no address was skipped whole');
 });
 
 test('pipeline-alerts: an overdue task fires its OWN org\'s rule for its owner — both orgs\', though both assignees are called Karen Russell', () => {
@@ -316,6 +334,7 @@ test('digest: a member\'s daily digest lists the tasks and deals they OWN — no
     assert.ok(a2.html.includes('Alpha Karen-two Deal'));
     assert.match(b.subject, /— 2 deals updated$/);
     assertNothingCrosses(digestMails);
+    assert.deepEqual(digestMails.filter(m => m.to === A_PIA.email), [], 'REGRESSION (§0.306): a placeholder address sent a digest — she has a task due today');
 });
 
 test('digest: the Monday team digest lists the manager\'s OWN org\'s reps — every one for an Admin, the team\'s for a Manager — and totals their own deals', () => {
@@ -330,6 +349,7 @@ test('digest: the Monday team digest lists the manager\'s OWN org\'s reps — ev
     assert.ok(avB.html.includes('Bram Bravo') && !avB.html.includes('Dana Diaz'));
     assert.match(avB.subject, /\$100K pipeline$/);
     assert.equal(repsTracked(mmB.html), 2, 'REGRESSION (§0.159): a Manager\'s team was matched by its NAME across orgs');
+    assert.deepEqual(teamDigestOf(A_PIA.email), [], 'REGRESSION (§0.306): a placeholder address sent a team digest — she leads Midmarket');
     assert.match(mmB.subject, /\$100K pipeline$/);
 });
 

@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { undeclaredIn, GLOBALS } from '../scripts/fnscope.mjs';
 
 const names = (src) => undeclaredIn(src).map(f => `${f.name}@${f.line}:${f.enclosing}`);
@@ -37,9 +37,10 @@ test('the April commit itself is flagged in both files it touched, and the fixed
     // machine with the history (§0.144). The workflow now fetches the history
     // for the unit job; a clone without it skips here, in words, instead of
     // reporting a scanner regression that did not happen.
-    try { execSync('git cat-file -e bf4a3c5^{commit}', { stdio: 'ignore' }); }
+    // git by its arguments, no shell: cmd.exe reads ^ as its escape and took it out, so every Windows run skipped here (§0.306).
+    try { execFileSync('git', ['cat-file', '-e', 'bf4a3c5^{commit}'], { stdio: 'ignore' }); }
     catch { return t.skip('bf4a3c5 is not in this clone (shallow checkout) — the April fixture cannot be read; the other tests still prove the scanner'); }
-    const at = (sha, f) => execSync(`git show ${sha}:${f}`, { encoding: 'utf8' });
+    const at = (sha, f) => execFileSync('git', ['show', `${sha}:${f}`], { encoding: 'utf8' });
     const oldAlerts = undeclaredIn(at('bf4a3c5', 'netlify/functions/pipeline-alerts.mjs')).map(f => f.name);
     const oldDigest = undeclaredIn(at('bf4a3c5', 'netlify/functions/digest.mjs')).map(f => f.name);
     assert.ok(oldAlerts.includes('profile'), `bf4a3c5 pipeline-alerts.mjs: ${oldAlerts}`);

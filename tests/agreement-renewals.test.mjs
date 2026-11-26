@@ -20,7 +20,7 @@ test('pipeline-alerts: a renewal pass per org — recipients are that org\'s Adm
     const s = code(read('netlify/functions/pipeline-alerts.mjs'));
     assert.ok(s.includes("import { buildRenewalQueue }                          from '../../src/utils/planVisits.js';"), 'one arithmetic with the queue');
     assert.ok(s.includes('    agreementRenewal: { enabled: true  },'), 'the preference defaults on');
-    assert.ok(s.includes("u.orgId === orgId && u.active && u.email && (u.role === 'Admin' || u.role === 'Manager'));"), 'recipients are the org\'s Admins and Managers');
+    assert.ok(s.includes("u.orgId === orgId && reachable(u) && (u.role === 'Admin' || u.role === 'Manager'));"), 'recipients are the org\'s Admins and Managers, active, with an address that is no placeholder (§0.306)');
     assert.ok(s.includes("if (wantsAlert(resolvedProfile, 'agreementRenewal')) {"), 'the email is behind the recipient\'s preference');
     assert.ok(s.includes("if (await wasRecentlyAlerted(orgId, u.name, cust.id, 'renewal')) { skipped++; continue; }"), 'one email per recipient per customer per DEDUP_DAYS');
     assert.ok(s.includes("sendSlackToOrg(orgId, slackTemplates.agreementRenewal(detail), 'agreementRenewal');"), 'the post carries its type, so the company switch applies');

@@ -21,6 +21,8 @@ import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
 import { withHeartbeat } from './_heartbeat.mjs';
 // Whose rows are whose, inside one org (state §0.159).
 import { teamRepsOf } from './_jobRoster.mjs';
+// Who can be mailed (state §0.306): active, an address that is no placeholder.
+import { reachable } from '../../src/utils/approvalNotices.js';
 
 const DEFAULT_PREFS = {
     stageChanged:        { enabled: true,  mode: 'instant' },
@@ -127,7 +129,7 @@ export const runDigest = async ({ now = new Date() } = {}) => {
         const allUsers = await db.select().from(users);
 
         for (const user of allUsers) {
-            if (!user.email || !user.active) continue;
+            if (!reachable(user)) continue;   // active, an address that is no placeholder (state §0.306)
 
             // The users table has no digestTime / timezone / notificationPrefs /
             // smsNotifications / mobile / phone columns: users.mjs sanitize() stores
@@ -300,7 +302,7 @@ export const runDigest = async ({ now = new Date() } = {}) => {
             // inside the profile jsonb (users.mjs), so `u.userType` on a db row is
             // always undefined — this filter had never matched anyone (state §0.101).
             const managers = allUsers.filter(u =>
-                u.email && u.active &&
+                reachable(u) &&
                 (u.role === 'Manager' || u.role === 'Admin')
             );
 

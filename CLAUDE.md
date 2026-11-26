@@ -366,7 +366,9 @@ One commit per verified batch; doc patch in the same commit.
   placeholder — never to the name the deal carries, never of their own act, greeted by their name now (§0.304, guide §18b147;
   `_dealMail.mjs`); an automation's blank To is a lead's own address, else the record's owner by app id (reachable; `mailRecipient`,
   `ownerToMail`), and its blank Assign-to the record's owner while an active member (§0.305) — an automation does not skip the owner's
-  own act: the rule is the switch. The alert job's do not yet (OPEN_ITEMS §4.5, left by §0.304). Slack's mover is the caller or "Someone"; the quote PDF names the owner by their
+  own act: the rule is the switch. The alert job alerts a deal whose owner is an active member, whatever name it carries, greeting
+  them by their name now; it, the renewal notices and the digests mail only a member who can be reached — a deal whose active owner
+  has no real address is still logged, posted, handed to the rules and copied to the manager (§0.306). Slack's mover is the caller or "Someone"; the quote PDF names the owner by their
   name now (§0.305).
 - A deal's probability is none or a whole 0–100 (§0.300, guide §18b143; src/utils/dealProbability.js): a 400 otherwise; a single save's move that names none
   takes the stage's default unless the rep set their own, a close its own; on the app's screens one with none counts and reads at its stage's default

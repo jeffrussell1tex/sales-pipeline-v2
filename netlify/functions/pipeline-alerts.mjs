@@ -47,6 +47,8 @@ import { buildRenewalQueue }                          from '../../src/utils/plan
 import { fellToCritical, managerCopied, fallWords }   from '../../src/utils/dealScore.js';
 // Each org's own stages (state §0.303): momentum is said of a deal short of its org's last two open stages.
 import { funnelInOrg }                                from './_links.mjs';
+// Who can be mailed (state §0.306): active, an address that is no placeholder — the deal emails' rule (§0.304).
+import { reachable }                                  from '../../src/utils/approvalNotices.js';
 import { commitStagesOf }                             from '../../src/utils/stages.js';
 
 const DEDUP_DAYS = 7;
@@ -232,8 +234,9 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
         const avgDaysByOrg = perOrg(allOpps, buildAvgDaysInStage);   // org → its own stage averages
         const actsByDeal   = activitiesByDeal(allActs);              // org + deal → its activities, newest first
 
+        // An open deal with an OWNER (state §0.306): by the Sales Rep name, an owned deal carrying none was never alerted.
         const activeOpps = allOpps.filter(o =>
-            o.stage !== 'Closed Won' && o.stage !== 'Closed Lost' && o.salesRep
+            o.stage !== 'Closed Won' && o.stage !== 'Closed Lost' && o.ownerId
         );
         // Each org's last two open stages (state §0.303), read once, when a deal of it is first a momentum candidate. A read that
         // fails is never the app's list in its place: that org's momentum is not said, every other alert and org goes on, and the
@@ -249,17 +252,24 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
         let skipped    = 0;
 
         for (const opp of activeOpps) {
-            const repName = opp.salesRep;
             const orgId   = opp.orgId;
             // The deal's rep is its OWNER, by app user id, on its own org's roster —
             // never the display name, which another member of this org or another
             // can share. An unassigned deal has no rep to alert.
             const roster  = rosters.get(orgId);
             const repUser = ownerOf(opp, roster);
-            if (!repUser?.email || !repUser.active) continue;
+            if (!repUser?.active) continue;   // an active member — the address is asked of their own email alone (state §0.306)
             // Cross-tenant safety: the rep is THIS org's member (ownerOf refuses any
             // other; kept as the last line, and it fails closed).
             if (repUser.orgId !== orgId) continue;
+            // The rep by their name now (state §0.306) — the greeting, the ledger and its weekly dedup; never the name the deal
+            // carries, which a rename leaves behind.
+            const repName = repUser.name || '';
+            // Who is mailed (state §0.306): an address that is no placeholder (`reachable`), the owner's and the manager's
+            // each. A deal whose owner has none is still logged, posted to Slack, handed to the rules and copied to the
+            // manager, and its texts follow the owner's preferences — only the email to no one is not sent.
+            const mailsRep = reachable(repUser);
+            const mailRep = async (msg) => { if (!mailsRep) return; await sendEmail({ to: repUser.email, ...msg }); emailsSent++; };
 
             // AppHeader.saveProfile saves these fields flat on the user row (top-level),
             // not nested inside user.profile. Read top-level first, fall back to
@@ -289,6 +299,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
             const name     = opp.opportunityName || opp.account || 'Unnamed deal';
             // A Manager of THIS org (by managedReps, then the rep's team), active, with an address.
             const manager  = managerOf(repUser, roster);
+            const mailManager = async (msg) => { if (!reachable(manager)) return; await sendEmail({ to: manager.email, ...msg }); emailsSent++; };
             const smsPhone = mobile || phone || null;
 
             // The deal's own org's activities: one org's row naming another org's
@@ -315,11 +326,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         // §0.99): the log, the company's Slack post and the manager copy
                         // follow the signal itself.
                         if (wantsAlert(resolvedProfile, 'dealSilent')) {
-                            await sendEmail({
-                                to: repUser.email,
-                                ...emailTemplates.dealSilent({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent, opportunityId: opp.id }),
-                            });
-                            emailsSent++;
+                            await mailRep(emailTemplates.dealSilent({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent, opportunityId: opp.id }));
                             if (wantsSms(resolvedProfile) && smsPhone) {
                                 await trySendSms(smsPhone, smsTemplates.dealSilent({ opportunityId: opp.id, orgId, dealName: name, daysSilent }), `dealSilent/${repName}`);
                                 smsSent++;
@@ -331,12 +338,8 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         console.log(`dealSilent → ${repUser.email} (${name}, ${daysSilent}d)`);
 
                         // Manager copy for very stale (21+ days)
-                        if (daysSilent >= 21 && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
-                            await sendEmail({
-                                to: manager.email,
-                                ...emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'silent', detail: `No activity in ${daysSilent} days`, opportunityId: opp.id }),
-                            });
-                            emailsSent++;
+                        if (daysSilent >= 21 && manager && wantsAlert(manager.profile || {}, 'managerAlerts')) {
+                            await mailManager(emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'silent', detail: `No activity in ${daysSilent} days`, opportunityId: opp.id }));
                             if (wantsSms(manager.profile || {})) {
                                 const mgPhone = (manager.profile || {}).mobile || (manager.profile || {}).phone;
                                 if (mgPhone) {
@@ -357,11 +360,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                 if (!alerted) {
                     try {
                         if (wantsAlert(resolvedProfile, 'dealStuck')) {
-                            await sendEmail({
-                                to: repUser.email,
-                                ...emailTemplates.dealStuck({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage, opportunityId: opp.id }),
-                            });
-                            emailsSent++;
+                            await mailRep(emailTemplates.dealStuck({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage, opportunityId: opp.id }));
                             if (wantsSms(resolvedProfile) && smsPhone) {
                                 await trySendSms(smsPhone, smsTemplates.dealStuck({ opportunityId: opp.id, orgId, dealName: name, stage: opp.stage, daysInStage }), `dealStuck/${repName}`);
                                 smsSent++;
@@ -374,12 +373,8 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
 
                         // Manager copy if 3× over average
                         const veryStuck = avgForStage ? daysInStage >= avgForStage * 3 : daysInStage >= 30;
-                        if (veryStuck && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
-                            await sendEmail({
-                                to: manager.email,
-                                ...emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'stuck', detail: `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`, opportunityId: opp.id }),
-                            });
-                            emailsSent++;
+                        if (veryStuck && manager && wantsAlert(manager.profile || {}, 'managerAlerts')) {
+                            await mailManager(emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'stuck', detail: `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`, opportunityId: opp.id }));
                             if (wantsSms(manager.profile || {})) {
                                 const mgPhone = (manager.profile || {}).mobile || (manager.profile || {}).phone;
                                 if (mgPhone) {
@@ -400,11 +395,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                 if (!alerted) {
                     try {
                         if (wantsAlert(resolvedProfile, 'closeLapsed')) {
-                            await sendEmail({
-                                to: repUser.email,
-                                ...emailTemplates.closeDateLapsed({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate, opportunityId: opp.id }),
-                            });
-                            emailsSent++;
+                            await mailRep(emailTemplates.closeDateLapsed({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate, opportunityId: opp.id }));
                             if (wantsSms(resolvedProfile) && smsPhone) {
                                 await trySendSms(smsPhone, smsTemplates.closeDateLapsed({ opportunityId: opp.id, orgId, dealName: name, daysLapsed }), `closeLapsed/${repName}`);
                                 smsSent++;
@@ -416,12 +407,8 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         console.log(`closeLapsed → ${repUser.email} (${name}, ${daysLapsed}d overdue)`);
 
                         // Always CC manager on lapsed close date
-                        if (manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
-                            await sendEmail({
-                                to: manager.email,
-                                ...emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'lapsed', detail: `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`, opportunityId: opp.id }),
-                            });
-                            emailsSent++;
+                        if (manager && wantsAlert(manager.profile || {}, 'managerAlerts')) {
+                            await mailManager(emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'lapsed', detail: `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`, opportunityId: opp.id }));
                             if (wantsSms(manager.profile || {})) {
                                 const mgPhone = (manager.profile || {}).mobile || (manager.profile || {}).phone;
                                 if (mgPhone) {
@@ -449,11 +436,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                 if (!alerted) {
                     try {
                         if (wantsAlert(resolvedProfile, 'dealMomentum')) {
-                            await sendEmail({
-                                to: repUser.email,
-                                ...emailTemplates.dealMomentum({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays, opportunityId: opp.id }),
-                            });
-                            emailsSent++;
+                            await mailRep(emailTemplates.dealMomentum({ orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays, opportunityId: opp.id }));
                         }
                         await logAlert(orgId, repName, 'velocity', opp, `${stageCount} stages in ${createdDays} days`);
                         await sendSlackToOrg(orgId, slackTemplates.dealMomentum({ opportunityId: opp.id, orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays }), 'dealMomentum');
@@ -477,8 +460,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         const fall = fallWords(winScore, name, opp.stage);
                         // The rep's preference gates the rep's email only (state §0.99); the block closes before logAlert.
                         if (wantsAlert(resolvedProfile, 'scoreDropAlert')) {
-                        await sendEmail({
-                            to: repUser.email,
+                        await mailRep({
                             subject: `⚠️ ${fall.subject}`,
                             html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><style>
                                 body{margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a2e}
@@ -512,7 +494,6 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                                 <div class="footer"><p>Win chance alert · <a href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'notifications', org: orgId })}">Manage preferences</a></p></div>
                             </div></body></html>`,
                         });
-                        emailsSent++;
                         }
                         await logAlert(orgId, repName, 'scoreDrop', opp, fall.log);
                         await sendSlackToOrg(orgId, slackTemplates.scoreDrop({ opportunityId: opp.id, orgId, repName, dealName: name, account: opp.account, arr, stage: opp.stage, score: winScore.score, verdict: fall.band }), 'scoreDropAlert');
@@ -521,12 +502,8 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                         console.log(`scoreDropAlert → ${repUser.email} (${name}, win chance ${winScore.score}%)`);
 
                         // The manager copied below a quarter of the stage's usual (2C, Q1).
-                        if (managerCopied(winScore) && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
-                            await sendEmail({
-                                to: manager.email,
-                                ...emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'score-critical', detail: `Win chance ${winScore.score}% — ${fall.band} (the stage's usual is ${winScore.weight}%): ${fall.why}`, opportunityId: opp.id }),
-                            });
-                            emailsSent++;
+                        if (managerCopied(winScore) && manager && wantsAlert(manager.profile || {}, 'managerAlerts')) {
+                            await mailManager(emailTemplates.managerDealAlert({ orgId, managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'score-critical', detail: `Win chance ${winScore.score}% — ${fall.band} (the stage's usual is ${winScore.weight}%): ${fall.why}`, opportunityId: opp.id }));
                         }
                     } catch (err) {
                         console.error(`scoreDropAlert error (${name}):`, err.message);
@@ -606,7 +583,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                 if (!queue.length) continue;
                 // Cross-tenant safety: recipients are THIS org's roster only.
                 const recipients = allUsers.filter(u =>
-                    u.orgId === orgId && u.active && u.email && (u.role === 'Admin' || u.role === 'Manager'));
+                    u.orgId === orgId && reachable(u) && (u.role === 'Admin' || u.role === 'Manager'));
                 for (const r of queue) {
                     const cust = r.customer;
                     const detail = {

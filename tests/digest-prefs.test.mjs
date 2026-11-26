@@ -66,7 +66,8 @@ test('neither helper names the loop-scoped binding; the rep loop hands them reso
 
 test('REGRESSION: managers and reps are selected by the role COLUMN — userType is a profile-jsonb key the row never carries', () => {
     assert.doesNotMatch(code, /\.userType\b/, 'no read of userType on a users row');
-    assert.match(code, /u\.email && u\.active &&\n\s*\(u\.role === 'Manager' \|\| u\.role === 'Admin'\)/, 'the Monday managers are Manager or Admin by role');
+    assert.ok(code.includes("            const managers = allUsers.filter(u =>\n                reachable(u) &&\n                (u.role === 'Manager' || u.role === 'Admin')\n"), 'the Monday managers are Manager or Admin by role, reachable (§0.306)');
+    assert.ok(code.includes('            if (!reachable(user)) continue;'), 'a member with no address, or a placeholder, is mailed no digest (§0.306)');
     // Since §0.159 the reps come from _jobRoster.mjs's teamRepsOf — role User, and
     // only the manager's OWN org's (the old line read every org's; job-roster.test.mjs RUNS it).
     assert.match(code, /const visibleReps = teamRepsOf\(mgr, allUsers\);/, 'the reps a manager sees are chosen by teamRepsOf');

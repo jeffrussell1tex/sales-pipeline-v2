@@ -116,6 +116,17 @@ test("the five hourly signals fire on the signal alone; the rep's preference gat
     assert.ok(s.includes('            if (daysSilent !== null && daysSilent >= 14) {'), 'silent');
     assert.ok(s.includes('            if (daysInStage !== null && daysInStage >= stuckThreshold && daysInStage >= 14) {'), 'stuck');
     assert.ok(s.includes('            if (daysLapsed !== null && daysLapsed > 0) {'), 'lapsed');
+    // The owner by app id (state §0.306): a deal with an active owner, greeted and deduped by their name now; the address
+    // asked only of the owner's own email and the manager's copy — the log, Slack, the rules and the texts go on.
+    for (const x of ["            o.stage !== 'Closed Won' && o.stage !== 'Closed Lost' && o.ownerId\n", '            if (!repUser?.active) continue;', "            const repName = repUser.name || '';\n",
+        '            const mailsRep = reachable(repUser);\n            const mailRep = async (msg) => { if (!mailsRep) return; await sendEmail({ to: repUser.email, ...msg }); emailsSent++; };\n',
+        '            const mailManager = async (msg) => { if (!reachable(manager)) return; await sendEmail({ to: manager.email, ...msg }); emailsSent++; };\n']) assert.equal(count(s, x), 1, x);
+    assert.equal(count(s, 'await mailRep('), 5, 'the five signals mail the rep through the one gate');
+    assert.equal(count(s, 'await mailManager('), 4, 'the four manager copies through the one gate');
+    assert.equal(count(s, 'to: repUser.email') + count(s, 'to: manager.email'), 2, 'no email to the rep or the manager but through the gates');
+    assert.ok(!/if \(!reachable\(repUser\)\) continue|manager\?\.email &&/.test(s), 'REGRESSION: a deal whose owner has no address skipped whole');
+    assert.ok(!/const repName\s*=\s*opp\.salesRep|&& o\.salesRep\n/.test(s), 'REGRESSION: the rep by the name the deal carries');
+    assert.ok(s.indexOf('const repUser = ownerOf(opp, roster);') < s.indexOf("const repName = repUser.name || '';") && s.includes('const repUser = ownerOf(opp, roster);'));
     // Momentum: short of its own org's last two open stages (state §0.303), each org read once, settling on its own.
     for (const x of ["            let late = null;\n            if (createdDays !== null && createdDays <= 14 && stageCount >= 2) {\n                try { late = await lateStagesOf(orgId); }\n                catch (err) { unreadOrgs.add(orgId);", "                late && !late.has(opp.stage)\n            ) {",
         "if (!lateByOrg.has(org)) lateByOrg.set(org, funnelInOrg(org).then((list) => new Set(commitStagesOf({ funnelStages: list }))));\n            return lateByOrg.get(org);",
