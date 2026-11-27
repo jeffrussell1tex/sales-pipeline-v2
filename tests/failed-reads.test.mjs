@@ -269,6 +269,83 @@ test('the nightly lead scoring: an org whose rules cannot be read is left as it 
     assert.equal(G.ops.filter((o) => o.kind === 'update').length, 0);
 });
 
+test('the hourly quote reminders: an org that cannot be read is counted and left, the orgs after it reminded, the run a 500 (state §0.309)', async () => {
+    const handler = await load('quote-reminders');
+    const now = Date.now();
+    // Two orgs, each with one quote waiting past its tier's SLA (15% — the defaults' 8 h tier), submitted 10 h ago; org_1's
+    // second quote waits 1 h — not due.
+    const Q = [{ id: 'q1', orgId: 'org_1' }, { id: 'q1b', orgId: 'org_1' }, { id: 'q2', orgId: 'org_2' }].map((q) => ({ ...q, status: 'Pending Approval', quoteNumber: q.id.toUpperCase(), version: 1, lineItems: [{ discountPct: 15 }], dealDiscount: 0 }));
+    const rowsWith = (failAt, what) => { let n = 0; return (op) => {
+        if (op.kind === 'select' && op.table === what) { n++; if (failAt === 'all' || n === failAt) down(); }
+        if (op.table === 'quotes') return Q;
+        if (op.table === 'audit_log' && op.kind === 'select') return Q.map((q) => ({ entityId: q.id, action: 'quote.submitted', timestamp: new Date(now - (q.id === 'q1b' ? 1 : 10) * 3600000) }));
+        if (op.table === 'users') return [{ id: 'usr_m', name: 'Mo Manager', email: 'mo@test.local', role: 'Manager', active: true }];
+        return [];
+    }; };
+    const hour = async (failAt, what = 'settings') => {
+        let res;
+        await ask(async (e, c) => (res = await handler(e, c)), 'quote-reminders', { method: 'POST', env: { JOBS_ENABLED: 'true' }, rows: rowsWith(failAt, what) }, 'Admin');
+        const recorded = G.ops.filter((o) => o.kind === 'insert' && o.table === 'audit_log' && o.given?.action === 'quote.reminded').map((o) => o.given.entityId);
+        return { status: res?.statusCode, body: JSON.parse(res?.body || '{}'), recorded };
+    };
+    for (const what of ['settings', 'audit_log', 'users', 'opportunities']) {
+        const first = await hour(1, what);
+        assert.equal(first.status, 500, `${what}: ${JSON.stringify(first.body)}`);
+        assert.deepEqual([first.body.orgs, first.body.reminded, first.body.orgsFailed, first.recorded], [2, 1, 1, ['q2']], `${what}: the first org's read failed — the second reminded`);
+        assert.equal(first.body.error, '1 org(s) could not be read — their quotes wait for the next hour', what);
+        const second = await hour(2, what);
+        assert.equal(second.status, 500, what);
+        assert.deepEqual([second.body.reminded, second.body.orgsFailed, second.recorded, second.body.error], [1, 1, ['q1'], '1 org(s) could not be read — their quotes wait for the next hour'], `${what}: the second org's read failed — the first reminded`);
+        const neither = await hour('all', what);
+        assert.equal(neither.status, 500, what);
+        assert.deepEqual([neither.body.orgs, neither.body.reminded, neither.body.orgsFailed, neither.recorded, neither.body.error], [2, 0, 2, [], '2 org(s) could not be read — their quotes wait for the next hour'], `${what}: both orgs failed — counted, each`);
+    }
+    const good = await hour(0);
+    assert.equal(good.status, 200, JSON.stringify(good.body));
+    // Every count, as the run kept it (the engine sends no email: each send refused, none counted).
+    assert.deepEqual(good.body, { orgs: 2, waiting: 3, reminded: 2, emails: 0, notDue: 1, orgsFailed: 0 });
+    assert.deepEqual(good.recorded, ['q1', 'q2']);
+});
+
+test('the report deliveries: a report that cannot be run is counted, the reports after it sent, the run a 500; one its own setup refuses is its error, the run a 200 (state §0.309)', async () => {
+    const handler = await load('report-deliveries');
+    // The job reads its own clock: a schedule due now, in a zone where now is far from midnight (a schedule's window does not
+    // wrap the day — at 23:59 UTC a run a moment later would find it not due).
+    const t = new Date(), timezone = t.getUTCHours() >= 2 && t.getUTCHours() <= 21 ? 'UTC' : 'Asia/Tokyo';
+    const { hour, minute } = (await import(new URL('src/utils/reportDelivery.js', ROOT).href)).localClock(t, timezone);
+    const delivery = { enabled: true, cadence: 'daily', hour, minute, timezone, emailTo: ['usr_o'] };
+    const R = ['r1', 'r2'].map((id, i) => ({ id, orgId: 'org_' + (i + 1), ownerId: 'user_o', name: id, source: 'Opportunities', dims: [{ id: 'owner' }], metrics: [{ id: 'deals' }], filters: {}, config: { delivery } }));
+    const OWNER = { id: 'usr_o', clerkUserId: 'user_o', role: 'Admin', name: 'Owner', email: 'o@test.local', active: true };
+    const run = async (failAt, what) => {
+        let n = 0, res;
+        await ask(async (e, c) => (res = await handler(e, c)), 'report-deliveries', { method: 'POST', env: { JOBS_ENABLED: 'true' }, rows: (op) => {
+            const hit = what === 'stamp' ? op.kind === 'update' && op.table === 'saved_reports' : op.kind === 'select' && op.table === what;
+            if (hit) { n++; if (failAt === 'all' || n === failAt) down(); }
+            if (op.kind === 'select' && op.table === 'saved_reports') return R;
+            return op.table === 'users' ? [OWNER] : [];
+        } }, 'Admin');
+        const body = JSON.parse(res.body);
+        delete body.at;
+        return { status: res.statusCode, body, stamped: G.ops.filter((o) => o.kind === 'update' && o.table === 'saved_reports').length, audited: G.ops.filter((o) => o.kind === 'insert' && o.table === 'audit_log').length };
+    };
+    // Each report: its owner, then its recipients, read from users; its data from the four record tables and settings.
+    // users: #1 the first report's owner, #2 its recipients, #3 the second's owner (#4 its recipients).
+    for (const [failAt, what, stamped] of [[1, 'users', 1], [2, 'users', 1], [3, 'users', 1], [4, 'users', 1], [1, 'opportunities', 1], [1, 'settings', 1], ['all', 'users', 0]]) {
+        const x = await run(failAt, what);
+        const threw = 2 - stamped;
+        assert.equal(x.status, 500, failAt + ' ' + what + ': ' + JSON.stringify(x.body));
+        assert.deepEqual(x.body, { reports: 2, due: 2, sent: 0, failed: 2, threw, error: threw + ' report(s) could not be read, run or stamped' }, failAt + ' ' + what);
+        assert.deepEqual([x.stamped, x.audited], [stamped, stamped], failAt + ' ' + what + ': the other report ran, was stamped and logged');
+    }
+    // A stamp that cannot be written: that report counted, the next stamped and logged.
+    const unstamped = await run(1, 'stamp');
+    assert.equal(unstamped.status, 500);
+    assert.deepEqual([unstamped.body, unstamped.stamped, unstamped.audited], [{ reports: 2, due: 2, sent: 0, failed: 2, threw: 1, error: '1 report(s) could not be read, run or stamped' }, 2, 1]);
+    // Nothing failed: the run is fine — each send refused is the schedule's own error, stamped and logged.
+    const fine = await run(0, 'users');
+    assert.deepEqual([fine.status, fine.body, fine.stamped, fine.audited], [200, { reports: 2, due: 2, sent: 0, failed: 2, threw: 0 }, 2, 2]);
+});
+
 test('rules an Admin changed while the model trained, and that cannot be read again, are never the replaced ones', async () => {
     const { scoreOrg } = await fn('score-leads-batch');
     const decided = Array.from({ length: 24 }, (_, i) => ({ id: 'l' + i, orgId: 'org_a', firstName: 'A', lastName: 'B', email: i % 2 ? 'a@test.local' : '', company: i % 3 ? 'C' : '', status: i % 2 ? 'Converted' : 'Dead', source: i % 2 ? 'Web' : 'Event' }));

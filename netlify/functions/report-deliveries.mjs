@@ -155,7 +155,7 @@ const run = async () => {
     // Every org's reports in one read — the job is the one reader across
     // tenants, like the digest; each row is then handled BY ITS OWN ORG.
     const rows = await db.select().from(savedReports);
-    let due = 0, sent = 0, failed = 0;
+    let due = 0, sent = 0, failed = 0, threw = 0;
     for (const row of rows) {
         const d = row.config?.delivery;
         if (!d || d.enabled !== true) continue;
@@ -166,12 +166,19 @@ const run = async () => {
             const r = await deliverReport(row, { now, trigger: 'schedule' });
             if (r.ok) sent++; else { failed++; console.warn(`report-deliveries: ${row.id} (${row.orgId}) — ${r.errors.join(' | ')}`); }
         } catch (e) {
-            failed++;
+            // A report whose org could not be read (its owner, recipients, data) or whose stamp could not be written
+            // never stops the next; the run then answers 500 (state §0.309). A schedule refused by its own setup
+            // (no recipients, Slack not connected) is its lastError, not a failure of the run. Netlify retries a 500
+            // (state §0.101): a report delivered is stamped, so a retry sends it no second time — one whose stamp
+            // failed after its send is sent again, as the next run inside its window would (OPEN_ITEMS §4.5).
+            failed++; threw++;
             console.error(`report-deliveries: ${row.id} (${row.orgId}) threw:`, e.message);
         }
     }
     console.log(`report-deliveries: ${rows.length} reports read, ${due} due, ${sent} sent, ${failed} failed at ${now.toISOString()}`);
-    return { statusCode: 200, body: JSON.stringify({ reports: rows.length, due, sent, failed, at: now.toISOString() }) };
+    const counts = { reports: rows.length, due, sent, failed, threw, at: now.toISOString() };
+    if (threw) return { statusCode: 500, body: JSON.stringify({ ...counts, error: `${threw} report(s) could not be read, run or stamped` }) };
+    return { statusCode: 200, body: JSON.stringify(counts) };
 };
 
 export const handler = withHeartbeat('report-deliveries', run);

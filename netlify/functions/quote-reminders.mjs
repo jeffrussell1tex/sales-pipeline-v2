@@ -8,6 +8,8 @@
 // those quotes). A reminder writes 'quote.reminded' — the record that it went, so
 // the next hour does not send it again, and what the quote's history shows. It is
 // written even when every reader has the notice switched off: nothing retries.
+// An org whose pass fails (a read the database refused) is counted and skipped —
+// never the orgs after it; the run then answers 500 (state §0.309).
 import { db } from '../../db/index.js';
 import { quotes, users, auditLog, opportunities, settings as settingsTable } from '../../db/schema.js';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -31,40 +33,51 @@ export async function runQuoteReminders({ orgId = null, now = Date.now() } = {})
     const byOrg = new Map();
     for (const q of waiting) byOrg.set(q.orgId, [...(byOrg.get(q.orgId) || []), q]);
 
-    let reminded = 0, emails = 0, notDue = 0;
+    let reminded = 0, emails = 0, notDue = 0, orgsFailed = 0;
     for (const [org, list] of byOrg) {
-        const [s] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, org)).limit(1);
-        const tiers = s?.extra?.approvalTiers?.length ? s.extra.approvalTiers : DEFAULT_QUOTE_APPROVAL_TIERS;
-        const events = await db.select({ entityId: auditLog.entityId, action: auditLog.action, at: auditLog.timestamp }).from(auditLog)
-            .where(and(eq(auditLog.orgId, org), eq(auditLog.entityType, 'quote'),
-                inArray(auditLog.entityId, list.map(q => q.id)), inArray(auditLog.action, ['quote.submitted', 'quote.reminded'])));
-        let roster = null, deals = null;
-        for (const q of list) {
-            const tier = approvalTierFor(quoteDiscountPct(q.lineItems, q.dealDiscount), tiers);
-            const submittedAt = latestAt(events, q.id, 'quote.submitted');
-            if (!reminderDue({ status: q.status, submittedAt, remindedAt: latestAt(events, q.id, 'quote.reminded'), sla: tier?.sla, now })) { notDue++; continue; }
-            roster = roster || await db.select().from(users).where(eq(users.orgId, org));
-            deals = deals || new Map((await db.select({ id: opportunities.id, account: opportunities.account, opportunityName: opportunities.opportunityName })
-                .from(opportunities).where(eq(opportunities.orgId, org))).map(d => [d.id, d]));
-            const to = reminderRecipients(tier, roster).filter(u => wantsNotice(u, APPROVAL_NOTICE_KEYS.waiting));
-            const deal = deals.get(q.opportunityId);
-            const waitedHours = Math.floor((now - new Date(submittedAt).getTime()) / 3600000);
-            const results = await Promise.allSettled(to.map(u => sendEmail({ to: u.email, ...emailTemplates.quoteWaiting({
-                name: u.name, quoteNumber: q.quoteNumber, account: deal?.account || '', dealName: deal?.opportunityName || '',
-                discountPct: Math.round(quoteDiscountPct(q.lineItems, q.dealDiscount)), value: q.totalValue, tierLabel: tier?.label || '',
-                url: quoteLink(appUrl(), q.id, org), reminder: true, waitedHours, orgId: org,
-            }) })));
-            results.forEach((r, i) => { if (r.status === 'rejected') console.error(`quote-reminders: to ${to[i].id} failed:`, r.reason?.message); });
-            emails += results.filter(r => r.status === 'fulfilled').length;
-            await writeAudit(org, {
-                action: 'quote.reminded', entityType: 'quote', entityId: q.id, entityName: q.name || q.quoteNumber,
-                detail: `${q.quoteNumber} v${q.version} · waited past ${slaHours(tier?.sla)}h · to ${to.map(u => u.name).join(', ') || 'no one (the notice is switched off)'}`,
-                userId: null, userName: 'Approval reminders',
-            });
-            reminded++;
+        // One org that cannot be read never stops the next (as score-leads-batch; state §0.309): a quote of it not yet
+        // reminded is not recorded either, so the next hour asks again — the run a 500, the heartbeat's error. Netlify
+        // retries a 500 (state §0.101): a reminder that went is recorded, so a retry sends it no second time — one whose
+        // record failed to write goes again, as the next hour's would (OPEN_ITEMS §4.5, left by §0.309 (c)).
+        try {
+            const [s] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, org)).limit(1);
+            const tiers = s?.extra?.approvalTiers?.length ? s.extra.approvalTiers : DEFAULT_QUOTE_APPROVAL_TIERS;
+            const events = await db.select({ entityId: auditLog.entityId, action: auditLog.action, at: auditLog.timestamp }).from(auditLog)
+                .where(and(eq(auditLog.orgId, org), eq(auditLog.entityType, 'quote'),
+                    inArray(auditLog.entityId, list.map(q => q.id)), inArray(auditLog.action, ['quote.submitted', 'quote.reminded'])));
+            let roster = null, deals = null;
+            for (const q of list) {
+                const tier = approvalTierFor(quoteDiscountPct(q.lineItems, q.dealDiscount), tiers);
+                const submittedAt = latestAt(events, q.id, 'quote.submitted');
+                if (!reminderDue({ status: q.status, submittedAt, remindedAt: latestAt(events, q.id, 'quote.reminded'), sla: tier?.sla, now })) { notDue++; continue; }
+                roster = roster || await db.select().from(users).where(eq(users.orgId, org));
+                deals = deals || new Map((await db.select({ id: opportunities.id, account: opportunities.account, opportunityName: opportunities.opportunityName })
+                    .from(opportunities).where(eq(opportunities.orgId, org))).map(d => [d.id, d]));
+                const to = reminderRecipients(tier, roster).filter(u => wantsNotice(u, APPROVAL_NOTICE_KEYS.waiting));
+                const deal = deals.get(q.opportunityId);
+                const waitedHours = Math.floor((now - new Date(submittedAt).getTime()) / 3600000);
+                const results = await Promise.allSettled(to.map(u => sendEmail({ to: u.email, ...emailTemplates.quoteWaiting({
+                    name: u.name, quoteNumber: q.quoteNumber, account: deal?.account || '', dealName: deal?.opportunityName || '',
+                    discountPct: Math.round(quoteDiscountPct(q.lineItems, q.dealDiscount)), value: q.totalValue, tierLabel: tier?.label || '',
+                    url: quoteLink(appUrl(), q.id, org), reminder: true, waitedHours, orgId: org,
+                }) })));
+                results.forEach((r, i) => { if (r.status === 'rejected') console.error(`quote-reminders: to ${to[i].id} failed:`, r.reason?.message); });
+                emails += results.filter(r => r.status === 'fulfilled').length;
+                await writeAudit(org, {
+                    action: 'quote.reminded', entityType: 'quote', entityId: q.id, entityName: q.name || q.quoteNumber,
+                    detail: `${q.quoteNumber} v${q.version} · waited past ${slaHours(tier?.sla)}h · to ${to.map(u => u.name).join(', ') || 'no one (the notice is switched off)'}`,
+                    userId: null, userName: 'Approval reminders',
+                });
+                reminded++;
+            }
+        } catch (err) {
+            orgsFailed++;
+            console.error(`quote-reminders: org ${org} failed —`, err.message);
         }
     }
-    return { statusCode: 200, body: JSON.stringify({ orgs: byOrg.size, waiting: waiting.length, reminded, emails, notDue }) };
+    const counts = { orgs: byOrg.size, waiting: waiting.length, reminded, emails, notDue, orgsFailed };
+    if (orgsFailed) return { statusCode: 500, body: JSON.stringify({ ...counts, error: `${orgsFailed} org(s) could not be read — their quotes wait for the next hour` }) };
+    return { statusCode: 200, body: JSON.stringify(counts) };
 }
 
 const run = async () => {

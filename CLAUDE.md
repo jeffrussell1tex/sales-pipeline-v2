@@ -565,8 +565,10 @@ One commit per verified batch; doc patch in the same commit.
   the lines of `tests/gates/rows.mjs` — read each changed line as a change in who is shown what (THE GUARD, tests/row-matrix.test.mjs; guide §18b141).
 - A read the server decides on, or whose value is stored, throws when it fails — never its default, an empty list
   or "no row" (§0.292; the one exception is Jeff's: an alert not known to have gone goes again, §0.293): `resolveCaller` throws (nulls are a member with no row here); `getCallerName` is a label —
-  a maker's name, none on a failure — nothing decides on; a read after a landed write keeps its own catch (THE GUARD, tests/failed-reads.test.mjs;
-  guide §18b138).
+  a maker's name, none on a failure — nothing decides on; a read after a landed write keeps its own catch; a job over many orgs settles each, the run a 500 — the quote
+  reminders and the report deliveries since §0.309; not yet the digest (it records nothing it sent, and Netlify retries a
+  500) nor pipeline-alerts' overdue and renewal scans (OPEN_ITEMS §4.5)
+  (THE GUARD, tests/failed-reads.test.mjs; guide §18b138).
 - A list that was not read is never a list of none (§0.294): the app's eleven lists (the team and the SPIFF
   claims since §0.295) load through `readList`
   (src/utils/listLoads.js), a tab is drawn once the lists it draws from were read (`TAB_LISTS`), a record's window once
