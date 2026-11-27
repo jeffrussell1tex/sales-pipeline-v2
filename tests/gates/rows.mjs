@@ -885,7 +885,7 @@ export const UNREACHED = {
     'calendar-add-event.mjs': 2,
     'coaching-notes.mjs': 1,
     'dashboard-configs.mjs': 1,
-    'digest.mjs': 7,
+    'digest.mjs': 9,   // §0.310: the digest's record of what went, read and written (digest_sends) — a scheduled job past its off switch
     'dispatch-automations.mjs': 4,
     'dispatch-customers.mjs': 1,
     'dispatch-jobs.mjs': 2,

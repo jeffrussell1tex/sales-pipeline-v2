@@ -213,7 +213,7 @@ test('every read, update and delete in the functions compares its org in its own
         });
     }
     assert.deepEqual(bare, [], "REGRESSION: a read of every org's rows");
-    assert.ok(n >= 558, `the statements read (${n})`);
+    assert.ok(n >= 565, `the statements read (${n})`);
     NO_ORG_IN_TEXT.forEach(([f, x, why], i) => assert.ok(used.has(i) && why, `${f} ${x}: named, and not there — take it out`));
     const merge = sourceOf('merge');
     assert.deepEqual([merge.split('await snapIds(').length - 1, (merge.match(/await snapIds\(t\.table, and\((?:eq\(t\.col, \w+\)|inArray\(t\.table\.id, ids\)), eq\(t\.table\.orgId, orgId\)/g) || []).length], [3, 3], "merge: each of snapIds' callers names its org");

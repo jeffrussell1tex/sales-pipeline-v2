@@ -27,6 +27,7 @@ import { sql } from 'drizzle-orm';
 // [table, column] pairs the suites need. Newest first -- the most recently added
 // column is the one most likely to be missing.
 const REQUIRED = [
+    ['digest_sends', 'day'],                         // §0.310: the digest's record of what it sent (db/apply-digest-sends.mjs --test --apply)
     ['opportunities', 'deal_score'],                 // AI scoring batch 2A: a deal's score, its chance of winning (db/apply-deal-score.mjs --test --apply)
     ['products', 'custom_price'],                    // §0.242: the Price Book's custom price (db/apply-product-custom-price.mjs --test --apply)
     ['quotes', 'tax_rate'],                          // §0.241: sales tax on quotes (db/apply-sales-tax.mjs --test --apply)

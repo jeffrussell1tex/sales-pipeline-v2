@@ -6,6 +6,12 @@
  * configured digestTime (e.g. "08:00") matches the current UTC hour,
  * then sends a digest of pending events from the past 24 hours.
  *
+ * What went is recorded (state §0.310 — Jeff, 26 Nov: "A"): one row per member and
+ * digest in digest_sends, by app id in their org, holding the member's own day it
+ * went for. Each member is settled on their own: one whose rows cannot be read is
+ * counted and left, the run then a 500 — and Netlify retries a 500 (state §0.101),
+ * so the record is what keeps a retry from mailing again what went and was recorded.
+ *
  * Netlify schedule config in netlify.toml:
  *   [functions."digest"]
  *   schedule = "0 * * * *"   (runs top of every hour)
@@ -14,7 +20,7 @@
 import { db } from '../../db/index.js';
 // Every link into the app a digest carries (state §0.237).
 import { appLink } from '../../src/utils/appLinks.js';
-import { users, opportunities, tasks, activities } from '../../db/schema.js';
+import { users, opportunities, tasks, activities, digestSends } from '../../db/schema.js';
 import { gte, eq, and } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
@@ -114,6 +120,33 @@ function localHourToUtc(localHour, timezone) {
     }
 }
 
+// The member's own date where they are, at this run — the day a digest goes for (state §0.310). By the
+// run's instant, never the wall clock; an unknown zone reads as UTC, as localHourToUtc treats it.
+export function localDayOf(now, timezone) {
+    const at = now instanceof Date ? now : new Date(now);
+    try { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at); }
+    catch { return at.toISOString().slice(0, 10); }
+}
+
+// Whether this digest went to this member for this day (state §0.310). A read that fails throws: the member is
+// counted and left, the run a 500 and Netlify's retry asks again — never mailed blind (guide §18b138 rules 1, 4).
+async function sentOn(row, kind, day) {
+    const [r] = await db.select({ day: digestSends.day }).from(digestSends)
+        .where(and(eq(digestSends.orgId, row.orgId), eq(digestSends.userId, row.id), eq(digestSends.kind, kind))).limit(1);
+    return r?.day === day;
+}
+
+// Recorded the moment the email went, before its text. A write that fails is logged and the email stands (guide
+// §18b138 rule 3) — a retry of this hour may send that one again (OPEN_ITEMS §4.5, left by §0.310).
+async function recordSent(row, kind, day, now) {
+    try {
+        await db.insert(digestSends).values({ orgId: row.orgId, userId: row.id, kind, day, sentAt: now })
+            .onConflictDoUpdate({ target: [digestSends.orgId, digestSends.userId, digestSends.kind], set: { day, sentAt: now }, setWhere: eq(digestSends.orgId, row.orgId) });
+    } catch (err) {
+        console.error(`digest: the ${kind} sent to ${row.id} could not be recorded —`, err.message);
+    }
+}
+
 // One run at an instant (state §0.159): the schedule's is now (`run`, at the
 // bottom); the integration suite hands it a Monday, so the weekly team digest
 // can be run at all.
@@ -121,12 +154,12 @@ export const runDigest = async ({ now = new Date() } = {}) => {
     const nowHour   = now.getUTCHours();
     const nowMinute = now.getUTCMinutes();
     const since24h  = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const today     = now.toISOString().slice(0, 10);
 
     console.log(`digest: running at UTC ${nowHour}:${String(nowMinute).padStart(2,'0')}`);
 
     try {
         const allUsers = await db.select().from(users);
+        let membersFailed = 0, managersFailed = 0;
 
         for (const user of allUsers) {
             if (!reachable(user)) continue;   // active, an address that is no placeholder (state §0.306)
@@ -158,138 +191,152 @@ export const runDigest = async ({ now = new Date() } = {}) => {
                 phone,
             };
 
-            const [dHour]       = digestTime.split(':').map(Number);
+            const [dHour]       = String(digestTime).split(':').map(Number);
             const targetUtcHour = localHourToUtc(dHour, userTz);
             if (targetUtcHour !== nowHour) continue;
 
-            console.log(`digest: processing user ${user.name} (${user.email}) — digestTime=${digestTime} tz=${userTz} → fires at UTC ${targetUtcHour}`);
+            // One member whose rows cannot be read — what went today among them — never stops the next, in any org (state
+            // §0.310): counted, the run a 500. A send that fails is logged where it is sent, as before — not a failure of the run.
+            try {
+                // The member's own date (state §0.310): their tasks due today and overdue are read by it, and what went is
+                // recorded for it — so the record and what it covered agree. It was the run's UTC date: a member in Tokyo,
+                // mailed at 23:00 UTC, was sent yesterday's tasks as today's.
+                const day = localDayOf(now, userTz);
+                console.log(`digest: processing user ${user.name} (${user.email}) — digestTime=${digestTime} tz=${userTz} → fires at UTC ${targetUtcHour}`);
 
-            // ── Tasks due today ────────────────────────────────────────────────
-            // A member's digest reads what they OWN — their app id as the owner, in
-            // their org (state §0.159). By name, a second member called the same
-            // received these tasks and deals too.
-            if (wantsDigest(resolvedProfile, 'taskDigest')) {
-                const todayTasks = await db.select().from(tasks)
-                    .where(and(eq(tasks.orgId, user.orgId), eq(tasks.ownerId, user.id)));
-                const dueTodayTasks = todayTasks.filter(t =>
-                    t.dueDate === today && !t.completed
-                );
-                if (dueTodayTasks.length > 0) {
-                    try {
-                        await sendEmail({
-                            to: user.email,
-                            ...emailTemplates.taskDigest({ orgId: user.orgId,
-                                repName: user.name,
-                                tasks: dueTodayTasks.map(t => ({
-                                    title:           t.title,
-                                    opportunityName: t.relatedTo || null,
-                                    dueTime:         t.dueTime   || null,
-                                    priority:        t.priority  || 'Medium',
-                                })),
-                            }),
-                        });
-                        if (wantsSms(resolvedProfile, 'digest')) {
-                            const smsPhone = mobile || phone;
-                            await trySendSms(
-                                smsPhone,
-                                smsTemplates.digestSummary({ orgId: user.orgId, repName: user.name, taskCount: dueTodayTasks.length, overdueCount: 0 }),
-                                `taskDigest/${user.name}`
-                            );
-                        }
-                        console.log(`taskDigest sent to ${user.email} (${dueTodayTasks.length} tasks)`);
-                    } catch (err) {
-                        console.error(`taskDigest error for ${user.email}:`, err.message);
-                    }
-                }
-            }
-
-            // ── Overdue tasks ─────────────────────────────────────────────────
-            if (wantsDigest(resolvedProfile, 'overdueTaskNudge')) {
-                const allTasks = await db.select().from(tasks)
-                    .where(and(eq(tasks.orgId, user.orgId), eq(tasks.ownerId, user.id)));
-                const overdueTasks = allTasks.filter(t =>
-                    t.dueDate && t.dueDate < today && !t.completed
-                );
-                if (overdueTasks.length > 0) {
-                    try {
-                        await sendEmail({
-                            to: user.email,
-                            ...emailTemplates.overdueTaskNudge({ orgId: user.orgId,
-                                repName: user.name,
-                                tasks: overdueTasks.map(t => {
-                                    const daysOverdue = Math.floor(
-                                        (now - new Date(t.dueDate)) / (1000 * 60 * 60 * 24)
-                                    );
-                                    return {
+                // ── Tasks due today ────────────────────────────────────────────────
+                // A member's digest reads what they OWN — their app id as the owner, in
+                // their org (state §0.159). By name, a second member called the same
+                // received these tasks and deals too.
+                if (wantsDigest(resolvedProfile, 'taskDigest')) {
+                    const todayTasks = await db.select().from(tasks)
+                        .where(and(eq(tasks.orgId, user.orgId), eq(tasks.ownerId, user.id)));
+                    const dueTodayTasks = todayTasks.filter(t =>
+                        t.dueDate === day && !t.completed
+                    );
+                    if (dueTodayTasks.length > 0 && !(await sentOn(user, 'taskDigest', day))) {
+                        try {
+                            await sendEmail({
+                                to: user.email,
+                                ...emailTemplates.taskDigest({ orgId: user.orgId,
+                                    repName: user.name,
+                                    tasks: dueTodayTasks.map(t => ({
                                         title:           t.title,
                                         opportunityName: t.relatedTo || null,
-                                        dueDate:         t.dueDate,
-                                        daysOverdue,
-                                    };
+                                        dueTime:         t.dueTime   || null,
+                                        priority:        t.priority  || 'Medium',
+                                    })),
                                 }),
-                            }),
-                        });
-                        if (wantsSms(resolvedProfile, 'digest')) {
-                            const smsPhone = mobile || phone;
-                            await trySendSms(
-                                smsPhone,
-                                smsTemplates.digestSummary({ orgId: user.orgId, repName: user.name, taskCount: 0, overdueCount: overdueTasks.length }),
-                                `overdueNudge/${user.name}`
-                            );
+                            });
+                            await recordSent(user, 'taskDigest', day, now);
+                            if (wantsSms(resolvedProfile, 'digest')) {
+                                const smsPhone = mobile || phone;
+                                await trySendSms(
+                                    smsPhone,
+                                    smsTemplates.digestSummary({ orgId: user.orgId, repName: user.name, taskCount: dueTodayTasks.length, overdueCount: 0 }),
+                                    `taskDigest/${user.name}`
+                                );
+                            }
+                            console.log(`taskDigest sent to ${user.email} (${dueTodayTasks.length} tasks)`);
+                        } catch (err) {
+                            console.error(`taskDigest error for ${user.email}:`, err.message);
                         }
-                        console.log(`overdueTaskNudge sent to ${user.email} (${overdueTasks.length} overdue)`);
-                    } catch (err) {
-                        console.error(`overdueTaskNudge error for ${user.email}:`, err.message);
                     }
                 }
-            }
 
-            // ── Opportunity updates digest ─────────────────────────────────────
-            if (wantsDigest(resolvedProfile, 'opportunityUpdated') || wantsDigest(resolvedProfile, 'stageChanged') || wantsDigest(resolvedProfile, 'commentAdded')) {
-                const recentOpps = await db.select().from(opportunities)
-                    .where(and(eq(opportunities.orgId, user.orgId), eq(opportunities.ownerId, user.id)));
-
-                const updatedRecently = recentOpps.filter(o =>
-                    o.updatedAt && new Date(o.updatedAt) >= since24h
-                );
-
-                if (updatedRecently.length > 0) {
-                    const dealRows = updatedRecently.map(o =>
-                        `<div class="detail-row"><span class="detail-label">${o.opportunityName || o.account || 'Deal'}</span><span>${o.stage}</span></div>`
-                    ).join('');
-
-                    try {
-                        await sendEmail({
-                            to: user.email,
-                            subject: `Your daily pipeline digest — ${updatedRecently.length} deal${updatedRecently.length !== 1 ? 's' : ''} updated`,
-                            html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><style>
-                                body{margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a2e}
-                                .wrapper{max-width:600px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}
-                                .header{background:#1a1a2e;padding:24px 32px}.header-title{color:#fff;font-size:16px;font-weight:600;margin:0}
-                                .body{padding:32px}.body h2{font-size:20px;font-weight:700;margin:0 0 8px;color:#1a1a2e}
-                                .body p{font-size:14px;line-height:1.6;color:#4a4a6a;margin:0 0 16px}
-                                .detail-box{background:#f4f6f8;border-radius:6px;padding:16px 20px;margin:20px 0}
-                                .detail-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:#4a4a6a}
-                                .detail-label{font-weight:600;color:#1a1a2e;min-width:140px}
-                                .btn{display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:14px;font-weight:600;margin-top:8px}
-                                .footer{background:#f4f6f8;padding:16px 32px;border-top:1px solid #e5e7eb;font-size:11px;color:#8b92a9;text-align:center}
-                                .footer a{color:#3b82f6;text-decoration:none}
-                            </style></head><body><div class="wrapper">
-                                <div class="header"><p class="header-title">Accelerep</p></div>
-                                <div class="body">
-                                    <h2>Your daily pipeline digest</h2>
-                                    <p>Hi ${user.name}, here are the deals that were updated in the last 24 hours.</p>
-                                    <div class="detail-box">${dealRows}</div>
-                                    <a class="btn" href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'pipeline', org: user.orgId })}">View Pipeline →</a>
-                                </div>
-                                <div class="footer"><p>You're receiving this as your daily digest. <a href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'notifications', org: user.orgId })}">Manage preferences</a></p></div>
-                            </div></body></html>`,
-                        });
-                        console.log(`opportunityDigest sent to ${user.email} (${updatedRecently.length} deals)`);
-                    } catch (err) {
-                        console.error(`opportunityDigest error for ${user.email}:`, err.message);
+                // ── Overdue tasks ─────────────────────────────────────────────────
+                if (wantsDigest(resolvedProfile, 'overdueTaskNudge')) {
+                    const allTasks = await db.select().from(tasks)
+                        .where(and(eq(tasks.orgId, user.orgId), eq(tasks.ownerId, user.id)));
+                    const overdueTasks = allTasks.filter(t =>
+                        t.dueDate && t.dueDate < day && !t.completed
+                    );
+                    if (overdueTasks.length > 0 && !(await sentOn(user, 'overdueTaskNudge', day))) {
+                        try {
+                            await sendEmail({
+                                to: user.email,
+                                ...emailTemplates.overdueTaskNudge({ orgId: user.orgId,
+                                    repName: user.name,
+                                    tasks: overdueTasks.map(t => {
+                                        const daysOverdue = Math.floor(
+                                            (now - new Date(t.dueDate)) / (1000 * 60 * 60 * 24)
+                                        );
+                                        return {
+                                            title:           t.title,
+                                            opportunityName: t.relatedTo || null,
+                                            dueDate:         t.dueDate,
+                                            daysOverdue,
+                                        };
+                                    }),
+                                }),
+                            });
+                            await recordSent(user, 'overdueTaskNudge', day, now);
+                            if (wantsSms(resolvedProfile, 'digest')) {
+                                const smsPhone = mobile || phone;
+                                await trySendSms(
+                                    smsPhone,
+                                    smsTemplates.digestSummary({ orgId: user.orgId, repName: user.name, taskCount: 0, overdueCount: overdueTasks.length }),
+                                    `overdueNudge/${user.name}`
+                                );
+                            }
+                            console.log(`overdueTaskNudge sent to ${user.email} (${overdueTasks.length} overdue)`);
+                        } catch (err) {
+                            console.error(`overdueTaskNudge error for ${user.email}:`, err.message);
+                        }
                     }
                 }
+
+                // ── Opportunity updates digest ─────────────────────────────────────
+                if (wantsDigest(resolvedProfile, 'opportunityUpdated') || wantsDigest(resolvedProfile, 'stageChanged') || wantsDigest(resolvedProfile, 'commentAdded')) {
+                    const recentOpps = await db.select().from(opportunities)
+                        .where(and(eq(opportunities.orgId, user.orgId), eq(opportunities.ownerId, user.id)));
+
+                    const updatedRecently = recentOpps.filter(o =>
+                        o.updatedAt && new Date(o.updatedAt) >= since24h
+                    );
+
+                    if (updatedRecently.length > 0 && !(await sentOn(user, 'opportunityDigest', day))) {
+                        const dealRows = updatedRecently.map(o =>
+                            `<div class="detail-row"><span class="detail-label">${o.opportunityName || o.account || 'Deal'}</span><span>${o.stage}</span></div>`
+                        ).join('');
+
+                        try {
+                            await sendEmail({
+                                to: user.email,
+                                subject: `Your daily pipeline digest — ${updatedRecently.length} deal${updatedRecently.length !== 1 ? 's' : ''} updated`,
+                                html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><style>
+                                    body{margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a2e}
+                                    .wrapper{max-width:600px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+                                    .header{background:#1a1a2e;padding:24px 32px}.header-title{color:#fff;font-size:16px;font-weight:600;margin:0}
+                                    .body{padding:32px}.body h2{font-size:20px;font-weight:700;margin:0 0 8px;color:#1a1a2e}
+                                    .body p{font-size:14px;line-height:1.6;color:#4a4a6a;margin:0 0 16px}
+                                    .detail-box{background:#f4f6f8;border-radius:6px;padding:16px 20px;margin:20px 0}
+                                    .detail-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:#4a4a6a}
+                                    .detail-label{font-weight:600;color:#1a1a2e;min-width:140px}
+                                    .btn{display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:14px;font-weight:600;margin-top:8px}
+                                    .footer{background:#f4f6f8;padding:16px 32px;border-top:1px solid #e5e7eb;font-size:11px;color:#8b92a9;text-align:center}
+                                    .footer a{color:#3b82f6;text-decoration:none}
+                                </style></head><body><div class="wrapper">
+                                    <div class="header"><p class="header-title">Accelerep</p></div>
+                                    <div class="body">
+                                        <h2>Your daily pipeline digest</h2>
+                                        <p>Hi ${user.name}, here are the deals that were updated in the last 24 hours.</p>
+                                        <div class="detail-box">${dealRows}</div>
+                                        <a class="btn" href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'pipeline', org: user.orgId })}">View Pipeline →</a>
+                                    </div>
+                                    <div class="footer"><p>You're receiving this as your daily digest. <a href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'notifications', org: user.orgId })}">Manage preferences</a></p></div>
+                                </div></body></html>`,
+                            });
+                            await recordSent(user, 'opportunityDigest', day, now);
+                            console.log(`opportunityDigest sent to ${user.email} (${updatedRecently.length} deals)`);
+                        } catch (err) {
+                            console.error(`opportunityDigest error for ${user.email}:`, err.message);
+                        }
+                    }
+                }
+            } catch (err) {
+                membersFailed++;
+                console.error(`digest: member ${user.id} (${user.orgId}) could not be read —`, err.message);
             }
         }
 
@@ -314,12 +361,14 @@ export const runDigest = async ({ now = new Date() } = {}) => {
 
                 const digestTime = mgr.digestTime || profile.digestTime || '08:00';
                 const userTz     = mgr.timezone   || profile.timezone   || 'UTC';
-                const [dHour]    = digestTime.split(':').map(Number);
+                const [dHour]    = String(digestTime).split(':').map(Number);
                 const targetUtcHour = localHourToUtc(dHour, userTz);
                 if (targetUtcHour !== nowHour) continue;
+                const day = localDayOf(now, userTz);
 
                 console.log(`managerTeamDigest: building for ${mgr.name} (${mgr.email})`);
 
+                let sending = false;   // a failure before the send — the record, a read, the build — is counted (state §0.310)
                 try {
                     // The reps this digest lists: the manager's OWN org's (state §0.159) —
                     // every rep for an Admin, the team's for a Manager. It read every org's
@@ -330,6 +379,7 @@ export const runDigest = async ({ now = new Date() } = {}) => {
                     // and the team's name together, so inside one org the name is the match.)
                     const visibleReps = teamRepsOf(mgr, allUsers);
                     if (visibleReps.length === 0) continue;
+                    if (await sentOn(mgr, 'managerTeamDigest', day)) continue;   // went this day: a retry sends it no second time
 
                     const allOpps = await db.select().from(opportunities).where(eq(opportunities.orgId, mgr.orgId));
                     const allTasks = await db.select().from(tasks).where(eq(tasks.orgId, mgr.orgId));
@@ -497,18 +547,26 @@ export const runDigest = async ({ now = new Date() } = {}) => {
                         <div class="footer"><p>Weekly manager digest · <a href="${appLink(process.env.APP_URL || 'https://salespipelinetracker.com', { kind: 'notifications', org: mgr.orgId })}">Manage preferences</a></p></div>
                     </div></body></html>`;
 
+                    sending = true;
                     await sendEmail({
                         to: mgr.email,
                         subject: `Weekly team health — ${atRisk > 0 ? `${atRisk} rep${atRisk>1?'s':''} need attention · ` : ''}${fmtTotal} pipeline`,
                         html,
                     });
+                    await recordSent(mgr, 'managerTeamDigest', day, now);
                     console.log(`managerTeamDigest sent to ${mgr.email} (${repRows.length} reps)`);
                 } catch (err) {
+                    if (!sending) managersFailed++;
                     console.error(`managerTeamDigest error for ${mgr.email}:`, err.message);
                 }
             }
         }
 
+        if (membersFailed || managersFailed) {
+            const error = `${membersFailed} member digest(s) and ${managersFailed} team digest(s) could not be read`;
+            console.error('digest:', error);
+            return { statusCode: 500, body: JSON.stringify({ error, membersFailed, managersFailed }) };
+        }
         console.log('digest: complete');
         return { statusCode: 200, body: 'Digest complete' };
 

@@ -31,6 +31,7 @@ const EXEMPT = {
     'dispatch-automations.mjs': 'the rules engine — its run history is the record',
     'pipeline-alerts.mjs':     'a scheduled job — the heartbeat is its record',
     'task-reminders.mjs':      'a scheduled job — the heartbeat is its record',
+    'digest.mjs':              'a scheduled job — the heartbeat is its record; its one write is its own record of what it sent (digest_sends, §0.310)',
     'score-leads-batch.mjs':   'a scheduled job — the heartbeat is its record',
 };
 // Functions that write NO table but hand data to a model or send it out — they must audit too.

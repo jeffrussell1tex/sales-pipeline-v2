@@ -74,3 +74,39 @@ test('REGRESSION: managers and reps are selected by the role COLUMN — userType
     const roster = readFileSync(new URL('../netlify/functions/_jobRoster.mjs', import.meta.url), 'utf8');
     assert.match(roster, /u\?\.orgId === mgr\.orgId && u\.role === 'User'/, 'the reps a manager sees are role User, of the manager\'s org');
 });
+
+test('§0.310 the record of what went: a table of its own, added by a script that only creates it — the test database guarded by host; each row in its member\'s org', () => {
+    const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    const strip = (s) => s.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+    const schema = read('db/schema.ts');
+    assert.ok(schema.includes("export const digestSends = pgTable('digest_sends', {\n    orgId:  text('org_id').notNull(),\n    userId: text('user_id').notNull(),"), 'the member by app id, in their org');
+    assert.ok(schema.includes("    primaryKey({ name: 'digest_sends_pk', columns: [t.orgId, t.userId, t.kind] }),"), 'one row per member and digest');
+    for (const line of ["    kind:   varchar('kind', { length: 40 }).notNull(),", "    day:    varchar('day', { length: 10 }).notNull(),", "    sentAt: timestamp('sent_at').notNull().defaultNow(),"]) assert.ok(schema.includes(line), line);
+    const apply = strip(read('db/apply-digest-sends.mjs'));
+    assert.ok(!/\b(DROP|ALTER|TRUNCATE|DELETE|UPDATE|INSERT)\b/.test(apply), 'additive only (guide §18c)');
+    assert.equal((apply.match(/await sql\x60\s*CREATE TABLE IF NOT EXISTS "digest_sends"/g) || []).length, 1, 'one statement that changes the database');
+    assert.ok(apply.includes('CONSTRAINT "digest_sends_pk" PRIMARY KEY ("org_id", "user_id", "kind")'));
+    // The columns as created, and as read back — the schema's, one for one.
+    assert.ok(apply.includes('        "org_id"  text NOT NULL,\n        "user_id" text NOT NULL,\n        "kind"    varchar(40) NOT NULL,\n        "day"     varchar(10) NOT NULL,\n        "sent_at" timestamp NOT NULL DEFAULT now(),\n'), 'the columns as created');
+    assert.ok(apply.includes("const want = [['org_id', 'text', null, 'NO'], ['user_id', 'text', null, 'NO'], ['kind', 'character varying', 40, 'NO'], ['day', 'character varying', 10, 'NO'], ['sent_at', 'timestamp without time zone', null, 'NO']];"), 'the columns as read back');
+    assert.ok(apply.includes("if (!/now\\(\\)/.test(after[4].column_default || '')) throw") && apply.includes("if (before.length) { console.log('checks only — the table is already there; its shape:'); await verify(); }") && apply.includes('await verify();\n'), 'the shape read back after the apply, and on a checks-only run of a table already there');
+    assert.ok(apply.includes("if (useTest && host.includes('ep-soft-morning')) throw"), 'the test path never reaches the shared app database');
+    assert.ok(apply.includes("const apply = process.argv.includes('--apply');") && apply.includes('if (!apply) {'), 'checks only without --apply');
+    assert.ok(apply.includes("if (pk.length !== 1 || pk[0].def !== 'PRIMARY KEY (org_id, user_id, kind)') throw"), 'read back: its key');
+    assert.ok(read('tests/integration/_schema-guard.mjs').includes("['digest_sends', 'day'],"), 'the test-schema guard names it');
+    // The record is read and written in the member's own org, by app id (the fake answers every row, so the text holds it).
+    assert.ok(code.includes('.where(and(eq(digestSends.orgId, row.orgId), eq(digestSends.userId, row.id), eq(digestSends.kind, kind))).limit(1);'));
+    assert.ok(code.includes('.values({ orgId: row.orgId, userId: row.id, kind, day, sentAt: now })'));
+    assert.ok(code.includes('setWhere: eq(digestSends.orgId, row.orgId) });'));
+    // Each send asks the record first — outside its send's catch, so a failed read is the member's, counted — and records
+    // itself once its email went, before its text.
+    for (const [kind, list] of [['taskDigest', 'dueTodayTasks'], ['overdueTaskNudge', 'overdueTasks'], ['opportunityDigest', 'updatedRecently']]) {
+        assert.ok(code.includes('if (' + list + ".length > 0 && !(await sentOn(user, '" + kind + "', day))) {"), kind);
+        assert.equal(code.split("await recordSent(user, '" + kind + "', day, now);").length - 1, 1, kind + ' recorded once');
+    }
+    assert.ok(code.indexOf("await recordSent(user, 'taskDigest', day, now);") > -1 && code.indexOf("await recordSent(user, 'taskDigest', day, now);") < code.indexOf('taskCount: dueTodayTasks.length'), 'the record before the text');
+    assert.ok(code.includes("await recordSent(user, 'overdueTaskNudge', day, now);") && code.includes('overdueCount: overdueTasks.length') && code.indexOf("await recordSent(user, 'overdueTaskNudge', day, now);") < code.indexOf('overdueCount: overdueTasks.length'), "the overdue nudge's record before its text");
+    assert.ok(code.includes("if (await sentOn(mgr, 'managerTeamDigest', day)) continue;") && code.includes("await recordSent(mgr, 'managerTeamDigest', day, now);"));
+    const send = code.indexOf('                    sending = true;\n                    await sendEmail({\n                        to: mgr.email,');
+    assert.ok(send > -1 && code.includes("const allActs  = await db.select().from(activities)") && code.indexOf("const allActs  = await db.select().from(activities)") < send && code.includes('const html = ') && code.indexOf('const html = ') < send, 'the team digest is counted until its send: its record, its reads and its build before it');
+});

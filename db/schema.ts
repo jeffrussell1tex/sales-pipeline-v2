@@ -1410,6 +1410,25 @@ export const siteJobHeartbeats = pgTable('site_job_heartbeats', {
     primaryKey({ name: 'site_job_heartbeats_pk', columns: [t.site, t.job] }),
 ]);
 
+// ── DIGEST SENDS (state §0.310) ───────────────────────────────────────────────
+// What the hourly digest (netlify/functions/digest.mjs) sent: one row per
+// member and digest — the member by app id, in their org — holding the day it
+// last went for, in the member's own zone. Netlify retries a run that answers
+// 500 (state §0.101), and the digest answers one when a member's rows cannot be
+// read: a digest recorded as gone that day is never sent again by the retry.
+// Jeff, 26 Nov: "A" (OPEN_ITEMS §4.5, left by §0.309 (a)). Read and written by
+// digest.mjs alone; no screen or GET reads it. A new table, additive
+// (db/apply-digest-sends.mjs — guide §18c, database first).
+export const digestSends = pgTable('digest_sends', {
+    orgId:  text('org_id').notNull(),
+    userId: text('user_id').notNull(),                  // users.id, the app id — never the Clerk id or a name
+    kind:   varchar('kind', { length: 40 }).notNull(),  // taskDigest | overdueTaskNudge | opportunityDigest | managerTeamDigest
+    day:    varchar('day', { length: 10 }).notNull(),   // YYYY-MM-DD, the member's local date the digest went for
+    sentAt: timestamp('sent_at').notNull().defaultNow(),
+}, (t) => [
+    primaryKey({ name: 'digest_sends_pk', columns: [t.orgId, t.userId, t.kind] }),
+]);
+
 // ── LEGACY: job_heartbeats (state §0.98) — superseded by site_job_heartbeats ──
 // Keyed by `job` alone, so dev and prod (one database) wrote the SAME row.
 // Nothing in this repo reads or writes it after §0.100; production's pre-§0.100

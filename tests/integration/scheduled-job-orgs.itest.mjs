@@ -75,7 +75,7 @@ const { runPipelineAlerts } = await import('../../netlify/functions/pipeline-ale
 const { runDigest } = await import('../../netlify/functions/digest.mjs');
 const { runTaskReminders } = await import('../../netlify/functions/task-reminders.mjs');
 const { db } = await import('../../db/index.js');
-const { users, opportunities, activities, tasks, automations, recommendationLog, settings } = await import('../../db/schema.js');
+const { users, opportunities, activities, tasks, automations, recommendationLog, settings, digestSends } = await import('../../db/schema.js');
 const { inArray } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
 
@@ -178,7 +178,7 @@ const TASKS = [
 const RULES = ORGS.map(org => ({ id: `auto_itest_alerts_${org}`, orgId: org, name: 'Overdue nudge', triggerEvent: 'task.overdue', active: true }));
 
 const cleanup = async () => {
-    for (const t of [recommendationLog, automations, tasks, activities, opportunities, users, settings]) {
+    for (const t of [recommendationLog, automations, tasks, activities, opportunities, users, settings, digestSends]) {
         await db.delete(t).where(inArray(t.orgId, ORGS));
     }
 };
@@ -358,6 +358,27 @@ test('digest: the Monday team digest lists the manager\'s OWN org\'s reps — ev
     assert.equal(repsTracked(mmB.html), 2, 'REGRESSION (§0.159): a Manager\'s team was matched by its NAME across orgs');
     assert.deepEqual(teamDigestOf(A_PIA.email), [], 'REGRESSION (§0.306): a placeholder address sent a team digest — she leads Midmarket');
     assert.match(mmB.subject, /\$100K pipeline$/);
+});
+
+test('digest: the same hour run again — Netlify\'s retry of a 500 — mails no one twice; what went is on the record, by app id, for the member\'s own day (state §0.310)', async () => {
+    const ours = (list) => list.filter(m => [DOMAIN_A, DOMAIN_B].some(d => String(m.to).endsWith(d)));
+    assert.ok(ours(digestMails).length >= 10, 'the first run mailed this suite\'s members');
+    reset();
+    const again = await runDigest({ now: NOW });
+    assert.equal(again.statusCode, 200, again.body);
+    assert.deepEqual(ours(mails).map(m => m.to + ' ' + m.subject), [], 'REGRESSION (§0.310): a retry of the hour mailed every member again');
+    assert.deepEqual(texts.filter(t => [PHONE_A, PHONE_B].includes(t.to)), [], 'nor texted them');
+    const rows = await db.select().from(digestSends).where(inArray(digestSends.orgId, ORGS));
+    const held = sorted(rows.map(r => r.userId + ' ' + r.kind + ' ' + r.day));
+    const today = NOW.toISOString().slice(0, 10);   // every member here is in UTC
+    const want = sorted([
+        ...[A_KAREN, B_KAREN].flatMap(m => ['taskDigest', 'overdueTaskNudge', 'opportunityDigest'].map(k => m.id + ' ' + k + ' ' + today)),
+        A_KAREN2.id + ' taskDigest ' + today, A_KAREN2.id + ' opportunityDigest ' + today,
+        ...[A_AVERY, A_MAYA, B_AVERY, B_MAYA].map(m => m.id + ' managerTeamDigest ' + today),
+    ]);
+    assert.deepEqual(held.filter(h => want.includes(h)), want, 'each digest that went, recorded once — the member by app id');
+    assert.ok(!held.some(h => h.startsWith(A_PIA.id + ' ')), 'a placeholder was mailed nothing, so nothing is recorded');
+    assert.ok(rows.every(r => (r.orgId === ORG_A) === r.userId.includes('_alerts_a_')), 'each row in its member\'s own org');
 });
 
 // ── task-reminders ───────────────────────────────────────────────────────────

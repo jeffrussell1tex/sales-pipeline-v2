@@ -139,6 +139,7 @@ const DISPATCH_CREATES = [
 const HELPER_UPSERTS = {
     '_bulk.mjs helper upsert': [1, "bulkUpsert: the bulk PUTs' rows, each over its stored row read whole in the org (partialRows, guide §18b106 rule 8)"],
     '_heartbeat.mjs helper upsert': [1, "a scheduled job's heartbeat, one row per site and job — no member's save"],
+    'digest.mjs helper upsert': [1, "the digest's record of what it sent: one row per member and digest, the day it went for — no member's save (§0.310)"],
     'users.mjs helper upsert': [1, "upsertUser: the create's path; a PUT passes updateOnly — an update (state §0.202)"],
 };
 

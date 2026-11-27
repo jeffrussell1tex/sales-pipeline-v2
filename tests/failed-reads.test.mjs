@@ -346,6 +346,144 @@ test('the report deliveries: a report that cannot be run is counted, the reports
     assert.deepEqual([fine.status, fine.body, fine.stamped, fine.audited], [200, { reports: 2, due: 2, sent: 0, failed: 2, threw: 0 }, 2, 2]);
 });
 
+test('the hourly digest: what went is recorded for the member\'s own day, so a retry of a 500 mails no one twice; a member whose rows cannot be read is counted and left, the members after them served, in any org; a team digest likewise (state §0.310)', async () => {
+    const { runDigest, localDayOf } = await fn('digest');
+    // The member's own date, by the run's instant.
+    assert.deepEqual([localDayOf(new Date('2026-11-23T23:00:00Z'), 'Asia/Tokyo'), localDayOf(new Date('2026-11-24T03:00:00Z'), 'America/Chicago'), localDayOf(new Date('2026-11-24T03:00:00Z'), 'Not/AZone'), localDayOf(new Date('2026-11-24T03:00:00Z'), '')], ['2026-11-24', '2026-11-23', '2026-11-24', '2026-11-24']);
+    const member = (id, orgId, role, profile = {}) => ({ id, orgId, role, name: id, email: id + '@test.local', active: true, profile: { digestTime: '08:00', timezone: 'UTC', ...profile } });
+    const deals = { notificationPrefs: { opportunityUpdated: { enabled: true, mode: 'digest' } } };
+    const TUE = new Date('2026-11-24T08:00:00Z'), WED = new Date('2026-11-25T08:00:00Z'), MON = new Date('2026-11-23T08:00:00Z');
+    // A run: every member's tasks (one due today, one overdue) and deals (one updated an hour ago) answered; the record kept in
+    // 'store' (org|member|kind → day) across runs, as the table keeps it; 'fails(op, n)' rejects a statement; 'refused' are the
+    // addresses whose mail the service refuses.
+    const run = async (now, people, store, { fails = () => false, refused = [], tasks = null } = {}) => {
+        const sent = [], counts = {}, realFetch = globalThis.fetch, was = G.sql;
+        G.ops = []; G.sql = true;
+        G.rows = (op) => {
+            counts[op.kind + ' ' + op.table] = (counts[op.kind + ' ' + op.table] || 0) + 1;
+            if (fails(op, counts[op.kind + ' ' + op.table])) down();
+            const today = now.toISOString().slice(0, 10);
+            if (op.table === 'users') return people;
+            if (op.table === 'tasks') return tasks || [{ id: 't1', title: 'Due', dueDate: today, completed: false }, { id: 't2', title: 'Late', dueDate: '2026-11-01', completed: false }];
+            if (op.table === 'opportunities') return [{ id: 'o1', opportunityName: 'Deal', stage: 'Proposal', updatedAt: new Date(now.getTime() - 3600000) }];
+            if (op.table === 'digest_sends' && op.kind === 'select') { const day = store.get(op.sql().params.slice(0, 3).join('|')); return day ? [{ day }] : []; }
+            if (op.table === 'digest_sends' && op.kind === 'insert') {
+                const key = [op.given.orgId, op.given.userId, op.given.kind].join('|');
+                // A row already there takes the day only if the statement's conflict update sets it — as the database would.
+                if (!store.has(key) || /do update set .*"day" = /.test(op.sql().text)) store.set(key, op.given.day);
+                return [];
+            }
+            return [];
+        };
+        globalThis.fetch = async (url, init) => {
+            if (String(url).includes('api.twilio.com')) { sent.push('text ' + new URLSearchParams(init.body).get('To')); return new Response('{"sid":"s"}', { status: 201, headers: { 'Content-Type': 'application/json' } }); }
+            const m = JSON.parse(init.body);
+            if (refused.includes(m.to[0])) return new Response('no', { status: 422 });
+            const kind = /Weekly team health/.test(m.subject) ? 'team' : /pipeline digest/.test(m.subject) ? 'deals' : /overdue/i.test(m.subject) ? 'overdue' : 'tasks';
+            sent.push(m.to[0].split('@')[0] + ' ' + kind);
+            mails.push({ to: m.to[0], kind, html: m.html });
+            return new Response('{"id":"m"}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+        };
+        process.env.RESEND_API_KEY = 're_test';
+        Object.assign(process.env, { TWILIO_ACCOUNT_SID: 'AC_test', TWILIO_AUTH_TOKEN: 't', TWILIO_FROM_NUMBER: '+15550000000' });
+        try {
+            const res = await runDigest({ now });
+            let body = res.body;
+            try { body = JSON.parse(res.body); } catch { /* the words */ }
+            return { status: res.statusCode, body, sent: sent.sort() };
+        } finally { globalThis.fetch = realFetch; G.sql = was; for (const k of ['RESEND_API_KEY', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM_NUMBER']) delete process.env[k]; }
+    };
+    const mails = [];
+    const said = (m, t) => ({ error: m + ' member digest(s) and ' + t + ' team digest(s) could not be read', membersFailed: m, managersFailed: t });
+    const all = (ids) => ids.flatMap((id) => [id + ' deals', id + ' overdue', id + ' tasks']).sort();
+    const TWO = [member('usr_a', 'org_1', 'User', deals), member('usr_b', 'org_2', 'User', deals)];
+
+    // A clean run: every digest sent and recorded for the member's day; the same hour again (a retry) sends none; the next day, all.
+    let store = new Map();
+    assert.deepEqual(await run(TUE, TWO, store), { status: 200, body: 'Digest complete', sent: all(['usr_a', 'usr_b']) });
+    assert.deepEqual([...store].sort(), ['org_1|usr_a|opportunityDigest', 'org_1|usr_a|overdueTaskNudge', 'org_1|usr_a|taskDigest', 'org_2|usr_b|opportunityDigest', 'org_2|usr_b|overdueTaskNudge', 'org_2|usr_b|taskDigest'].map((k) => [k, '2026-11-24']));
+    assert.deepEqual(await run(TUE, TWO, store), { status: 200, body: 'Digest complete', sent: [] }, 'REGRESSION (§0.310): the same hour again mailed every member twice');
+    assert.deepEqual((await run(WED, TWO, store)).sent, all(['usr_a', 'usr_b']), 'a new day: each digest again');
+    assert.ok([...store.values()].every((d) => d === '2026-11-25'), 'REGRESSION (§0.310): the second day kept the first day\'s row');
+    assert.deepEqual((await run(WED, TWO, store)).sent, [], 'and a retry of the second day sends none');
+
+    // One member's read fails: counted and left, the other served; the retry serves that one alone.
+    for (const [what, n] of [['select tasks', 1], ['select tasks', 2], ['select opportunities', 1], ['select digest_sends', 1], ['select digest_sends', 3]]) {
+        store = new Map();
+        const first = await run(TUE, TWO, store, { fails: (op, k) => op.kind + ' ' + op.table === what && k === n });
+        assert.deepEqual([first.status, first.body], [500, said(1, 0)], what + ' #' + n);
+        assert.ok(first.sent.filter((x) => x.startsWith('usr_b')).length === 3, what + ' #' + n + ': the next member served — ' + first.sent);
+        const retry = await run(TUE, TWO, store);
+        assert.deepEqual([retry.status, retry.body], [200, 'Digest complete'], what + ' #' + n + ': the retry');
+        assert.deepEqual([...first.sent, ...retry.sent].sort(), all(['usr_a', 'usr_b']), what + ' #' + n + ': across the run and its retry, each digest once');
+    }
+    // Both members' reads fail: both counted.
+    assert.deepEqual((await run(TUE, TWO, new Map(), { fails: (op) => op.table === 'tasks' })).body, said(2, 0));
+    // A record that cannot be written: logged, the email stands, the run fine — and that one alone goes again on a rerun.
+    store = new Map();
+    const unrecorded = await run(TUE, TWO, store, { fails: (op, k) => op.kind === 'insert' && op.table === 'digest_sends' && k === 1 });
+    assert.deepEqual([unrecorded.status, unrecorded.sent], [200, all(['usr_a', 'usr_b'])]);
+    assert.deepEqual((await run(TUE, TWO, store)).sent, ['usr_a tasks']);
+    const texting = [member('usr_s', 'org_1', 'User', { mobile: '+15551230000', smsNotifications: { enabled: true, digest: true } })];
+    const textRun = await run(TUE, texting, new Map(), { fails: (op) => op.kind === 'insert' && op.table === 'digest_sends' });
+    assert.deepEqual([textRun.status, textRun.sent], [200, ['text +15551230000', 'text +15551230000', 'usr_s overdue', 'usr_s tasks']], 'REGRESSION (§0.310): a record not written stopped the text after its email');
+    // A send the mail service refuses: not recorded, not a failure of the run — a rerun of that hour sends it (Netlify's retry of a
+    // 500 another failure caused); otherwise it does not go that day, as before.
+    store = new Map();
+    const refusedRun = await run(TUE, TWO, store, { refused: ['usr_a@test.local'] });
+    assert.deepEqual([refusedRun.status, refusedRun.sent], [200, all(['usr_b'])]);
+    assert.ok(![...store.keys()].some((k) => k.includes('usr_a')), 'what did not go is not recorded');
+    assert.deepEqual((await run(TUE, TWO, store)).sent, all(['usr_a']));
+    // A digest time stored as a number fires at its hour; as an object, never — neither throws.
+    assert.deepEqual(await run(TUE, [member('usr_n', 'org_1', 'User', { digestTime: 8 }), member('usr_o', 'org_1', 'User', { digestTime: { at: 8 } }), member('usr_a', 'org_1', 'User')], new Map()),
+        { status: 200, body: 'Digest complete', sent: ['usr_a overdue', 'usr_a tasks', 'usr_n overdue', 'usr_n tasks'] }, 'REGRESSION (§0.310): a digest time that is no string ended the run for everyone after it');
+    // The member's own day: Tokyo's 08:00 is 23:00 UTC the day before — recorded for Tokyo's date.
+    store = new Map(); mails.length = 0;
+    await run(new Date('2026-11-23T23:00:00Z'), [member('usr_t', 'org_1', 'User', { timezone: 'Asia/Tokyo' })], store,
+        { tasks: [{ id: 't1', title: 'Due Tokyo Tuesday', dueDate: '2026-11-24', completed: false }, { id: 't2', title: 'Due Tokyo Monday', dueDate: '2026-11-23', completed: false }] });
+    assert.deepEqual([...store.values()], ['2026-11-24', '2026-11-24']);
+    const tokyo = (kind) => mails.find((m) => m.kind === kind)?.html || '';
+    assert.ok(tokyo('tasks').includes('Due Tokyo Tuesday') && !tokyo('tasks').includes('Due Tokyo Monday'), 'REGRESSION (§0.310): due today by the UTC date — Tokyo was sent yesterday\'s tasks as today\'s');
+    assert.ok(tokyo('overdue').includes('Due Tokyo Monday') && !tokyo('overdue').includes('Due Tokyo Tuesday'), 'overdue by the member\'s own date');
+
+    // A Monday: two Admins of two orgs, each with a rep. Each team digest recorded; a retry sends none.
+    const FOUR = [member('usr_m1', 'org_1', 'Admin'), member('usr_r1', 'org_1', 'User'), member('usr_m2', 'org_2', 'Admin'), member('usr_r2', 'org_2', 'User')];
+    const team = (out) => out.sent.filter((x) => x.endsWith(' team'));
+    store = new Map();
+    const monday = await run(MON, FOUR, store);
+    assert.deepEqual([monday.status, team(monday)], [200, ['usr_m1 team', 'usr_m2 team']]);
+    assert.equal(store.get('org_1|usr_m1|managerTeamDigest'), '2026-11-23');
+    assert.equal(store.get('org_2|usr_m2|managerTeamDigest'), '2026-11-23');
+    assert.deepEqual(team(await run(MON, FOUR, store)), [], 'REGRESSION (§0.310): a retry sent the team digests again');
+    // A team digest whose record or reads fail before its send: counted, the other Admin's sent; the retry sends the one left.
+    for (const [what, n] of [['select opportunities', 1], ['select activities', 1], ['select opportunities', 2]]) {
+        store = new Map();
+        const first = await run(MON, FOUR, store, { fails: (op, k) => op.kind + ' ' + op.table === what && k === n });
+        assert.deepEqual([first.status, first.body], [500, said(0, 1)], what + ' #' + n);
+        assert.equal(team(first).length, 1, what + ' #' + n + ': the other Admin\'s sent');
+        assert.deepEqual([...team(first), ...team(await run(MON, FOUR, store))].sort(), ['usr_m1 team', 'usr_m2 team'], what + ' #' + n + ': each once across the retry');
+    }
+    // The team digest's record read, failing: counted (the members' record reads come first — four members, two digests each).
+    const teamRecord = await run(MON, FOUR, new Map(), { fails: (op, k) => op.kind === 'select' && op.table === 'digest_sends' && k === 9 });
+    assert.deepEqual([teamRecord.status, teamRecord.body, team(teamRecord).length], [500, said(0, 1), 1]);
+    // A team digest the mail service refuses is no failed read: the run fine, nothing recorded for it.
+    store = new Map();
+    const refusedTeam = await run(MON, FOUR, store, { refused: ['usr_m1@test.local'] });
+    assert.deepEqual([refusedTeam.status, team(refusedTeam)], [200, ['usr_m2 team']]);
+    assert.equal(store.get('org_1|usr_m1|managerTeamDigest'), undefined);
+    // Both halves at once: counted apart.
+    assert.deepEqual((await run(MON, FOUR, new Map(), { fails: (op) => op.table === 'tasks' })).body, said(4, 2));
+    // An Admin whose digest time is no string: as a number, their team digest at its hour; as an object, none — neither throws.
+    const odd = (digestTime) => [{ ...FOUR[0], profile: { ...FOUR[0].profile, digestTime } }, ...FOUR.slice(1)];
+    assert.deepEqual(team(await run(MON, odd(8), new Map())), ['usr_m1 team', 'usr_m2 team']);
+    const objectTime = await run(MON, odd({ at: 8 }), new Map());
+    assert.deepEqual([objectTime.status, team(objectTime)], [200, ['usr_m2 team']], 'REGRESSION (§0.310): a manager\'s digest time that is no string ended the run for every manager after them');
+    // The team digest's day is the Admin's own: Tokyo's 05:00 on Tuesday is Monday 20:00 UTC.
+    store = new Map();
+    await run(new Date('2026-11-23T20:00:00Z'), [member('usr_mt', 'org_3', 'Admin', { timezone: 'Asia/Tokyo', digestTime: '05:00' }), member('usr_rt', 'org_3', 'User')], store);
+    assert.equal(store.get('org_3|usr_mt|managerTeamDigest'), '2026-11-24', 'the Admin\'s own date, not the run\'s UTC date');
+});
+
 test('rules an Admin changed while the model trained, and that cannot be read again, are never the replaced ones', async () => {
     const { scoreOrg } = await fn('score-leads-batch');
     const decided = Array.from({ length: 24 }, (_, i) => ({ id: 'l' + i, orgId: 'org_a', firstName: 'A', lastName: 'B', email: i % 2 ? 'a@test.local' : '', company: i % 3 ? 'C' : '', status: i % 2 ? 'Converted' : 'Dead', source: i % 2 ? 'Web' : 'Event' }));
