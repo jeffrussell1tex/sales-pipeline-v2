@@ -484,6 +484,66 @@ test('the hourly digest: what went is recorded for the member\'s own day, so a r
     assert.equal(store.get('org_3|usr_mt|managerTeamDigest'), '2026-11-24', 'the Admin\'s own date, not the run\'s UTC date');
 });
 
+test('the hourly alerts: the overdue and renewal scans say a read that failed, the renewal scan settles each org on its own, the run a 500; an alert time that is no string never throws (state §0.311)', async () => {
+    const { runPipelineAlerts } = await fn('pipeline-alerts');
+    const NOW = new Date('2026-11-24T08:00:00Z'), soon = '2026-12-04';
+    const admin = (id, orgId, profile = {}) => ({ id, orgId, role: 'Admin', name: id, email: id + '@test.local', active: true, profile: { alertTime: '08:00', timezone: 'UTC', ...profile } });
+    const customer = (id, orgId) => ({ id, orgId, name: 'Customer ' + id, serviceAgreement: 'Gold', agreementExpiry: soon });
+    // A run on the gate matrix's engine: 'people' the roster, 'fails(op, n)' rejects a statement; the renewal Slack dedupe
+    // read is asked once per customer whose org's pass got that far — its org read off drizzle's own SQL.
+    const run = async (people, { fails = () => false, customers = [customer('c1', 'org_1'), customer('c2', 'org_2')], overdue = true, deals = [], tasks = [] } = {}) => {
+        const counts = {}, slackAsked = [], was = G.sql;
+        G.ops = []; G.sql = true;
+        G.rows = (op) => {
+            const k = op.kind + ' ' + op.table; counts[k] = (counts[k] || 0) + 1;
+            if (fails(op, counts[k])) down();
+            if (op.table === 'users') return people;
+            if (op.table === 'automations' && op.kind === 'select') return overdue ? [{ orgId: 'org_1' }] : [];
+            if (op.table === 'tasks') return tasks;
+            if (op.table === 'opportunities') return deals;
+            if (op.table === 'dispatch_customers') return customers;
+            if (op.table === 'recommendation_log' && op.kind === 'select') { const p = op.sql()?.params || []; if (p.includes('__org__')) slackAsked.push(p[0]); return []; }
+            return [];
+        };
+        try {
+            const res = await runPipelineAlerts({ now: NOW });
+            let body = res.body;
+            try { body = JSON.parse(res.body); } catch { /* the words */ }
+            return { status: res.statusCode, body, slackAsked: slackAsked.sort() };
+        } finally { G.sql = was; }
+    };
+    const TWO = [admin('usr_a', 'org_1'), admin('usr_b', 'org_2')];
+    const fine = await run(TWO);
+    assert.deepEqual([fine.status, fine.body.error, fine.slackAsked], [200, undefined, ['org_1', 'org_2']], 'nothing failed: both orgs\' renewals said');
+    // The overdue scan's reads — every org's, at once — failing: said, the run a 500; the renewals still said.
+    const OVERDUE = "the overdue-task scan could not read the rules or the tasks: no org's overdue rules ran";
+    for (const what of ['select automations', 'select tasks']) {
+        const x = await run(TWO, { fails: (op) => op.kind + ' ' + op.table === what });
+        assert.deepEqual([x.status, x.body.error, x.slackAsked], [500, OVERDUE, ['org_1', 'org_2']], 'REGRESSION (§0.311): ' + what + ' failed under a 200');
+    }
+    // The renewal scan's reads of every org's customers or plans failing: said, the run a 500.
+    const RENEWALS = "the renewal scan could not read the customers or the plans: no org's renewals were said";
+    for (const what of ['select dispatch_customers', 'select dispatch_service_plans']) {
+        const x = await run(TWO, { fails: (op) => op.kind + ' ' + op.table === what });
+        assert.deepEqual([x.status, x.body.error, x.slackAsked], [500, RENEWALS, []], 'REGRESSION (§0.311): ' + what + ' failed under a 200');
+    }
+    // One org's renewal pass failing (here: its Admin's alert time cannot be read as words) — counted, the next org said.
+    const unreadable = { toString() { throw new Error('TEST unreadable alert time'); } };
+    const oneOrg = await run([admin('usr_a', 'org_1', { alertTime: unreadable }), admin('usr_b', 'org_2')], { overdue: false });
+    assert.deepEqual([oneOrg.status, oneOrg.body.error, oneOrg.slackAsked], [500, 'renewals not said for 1 org(s): their pass failed', ['org_2']], 'REGRESSION (§0.311): one org\'s renewals stopped every org after it');
+    // Two failures at once — the overdue scan's read and both orgs' renewal passes — each said, in order, joined (the order of
+    // all four words is held by agreement-renewals.test.mjs's source pin; a failed customers read leaves no org's pass to fail).
+    const all = await run([admin('usr_a', 'org_1', { alertTime: unreadable }), admin('usr_b', 'org_2', { alertTime: unreadable })], { fails: (op) => op.kind + ' ' + op.table === 'select tasks' });
+    assert.deepEqual([all.status, all.body.error], [500, OVERDUE + '; renewals not said for 2 org(s): their pass failed']);
+    // An alert time stored as a number fires at its hour, as an object never — neither throws, in the deal loop or the scans:
+    // the overdue task fires for the number, not for the object.
+    for (const alertTime of [8, { at: 8 }]) {
+        const x = await run([admin('usr_a', 'org_1', { alertTime }), admin('usr_b', 'org_2')], { deals: [{ id: 'd1', orgId: 'org_1', ownerId: 'usr_a', salesRep: 'usr_a', opportunityName: 'Deal', stage: 'Proposal', arr: '1000', forecastedCloseDate: '2026-11-01' }],
+            tasks: [{ id: 't1', orgId: 'org_1', ownerId: 'usr_a', title: 'Late task', dueDate: '2026-11-01', completed: false }] });
+        assert.deepEqual([x.status, x.body.error, x.slackAsked, x.body.overdueFired], [200, undefined, ['org_1', 'org_2'], typeof alertTime === 'number' ? 1 : 0], 'REGRESSION (§0.311): an alert time that is no string — ' + JSON.stringify(alertTime));
+    }
+});
+
 test('rules an Admin changed while the model trained, and that cannot be read again, are never the replaced ones', async () => {
     const { scoreOrg } = await fn('score-leads-batch');
     const decided = Array.from({ length: 24 }, (_, i) => ({ id: 'l' + i, orgId: 'org_a', firstName: 'A', lastName: 'B', email: i % 2 ? 'a@test.local' : '', company: i % 3 ? 'C' : '', status: i % 2 ? 'Converted' : 'Dead', source: i % 2 ? 'Web' : 'Event' }));

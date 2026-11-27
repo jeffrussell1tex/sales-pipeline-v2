@@ -567,7 +567,8 @@ One commit per verified batch; doc patch in the same commit.
   or "no row" (§0.292; the one exception is Jeff's: an alert not known to have gone goes again, §0.293): `resolveCaller` throws (nulls are a member with no row here); `getCallerName` is a label —
   a maker's name, none on a failure — nothing decides on; a read after a landed write keeps its own catch; a job over many orgs settles each, the run a 500 — the quote
   reminders and the report deliveries since §0.309, the digest since §0.310 (it records what it sent — digest_sends — so
-  Netlify's retry of a 500 sends again only what is not on the record); not yet pipeline-alerts' overdue and renewal scans (OPEN_ITEMS §4.5)
+  Netlify's retry of a 500 sends again only what is not on the record), and the alert job's scans since §0.311 — each failed
+  read said, the renewal scan by org (its ledger the record, save rule 6's resend; OPEN_ITEMS §4.5)
   (THE GUARD, tests/failed-reads.test.mjs; guide §18b138).
 - A list that was not read is never a list of none (§0.294): the app's eleven lists (the team and the SPIFF
   claims since §0.295) load through `readList`

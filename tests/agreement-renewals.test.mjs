@@ -25,8 +25,17 @@ test('pipeline-alerts: a renewal pass per org — recipients are that org\'s Adm
     assert.ok(s.includes("if (await wasRecentlyAlerted(orgId, u.name, cust.id, 'renewal')) { skipped++; continue; }"), 'one email per recipient per customer per DEDUP_DAYS');
     assert.ok(s.includes("sendSlackToOrg(orgId, slackTemplates.agreementRenewal(detail), 'agreementRenewal');"), 'the post carries its type, so the company switch applies');
     assert.ok(s.includes("wasRecentlyAlerted(orgId, '__org__', cust.id, 'renewal-slack')"), 'one post per customer per DEDUP_DAYS');
-    assert.ok(s.includes('} // end for loop') && s.indexOf('let renewalsSent = 0;') > s.indexOf('} // end for loop'), 'runs after the deal loop, so a failure there cannot stop the deal signals');
-    assert.ok(s.indexOf("console.error('pipeline-alerts: agreement renewals failed:', err.message);") > s.indexOf('let renewalsSent = 0;'), 'and its own failure is caught, not the run\'s');
+    const start = 'let renewalsSent = 0, renewalOrgsFailed = 0, renewalsUnread = false;';
+    assert.ok(s.includes('} // end for loop') && s.includes(start) && s.indexOf(start) > s.indexOf('} // end for loop'), 'runs after the deal loop, so a failure there cannot stop the deal signals');
+    // Since §0.311 each org on its own, and a failure said: counted, the run a 500 — never a 200 over it.
+    assert.ok(s.includes("            renewalsUnread = true;\n            console.error('pipeline-alerts: agreement renewals failed:', err.message);") && s.indexOf("console.error('pipeline-alerts: agreement renewals failed:', err.message);") > s.indexOf(start), 'a read of every org\'s customers or plans that fails is said');
+    assert.ok(s.includes('                } catch (err) {\n                    renewalOrgsFailed++;\n'), 'one org\'s pass that fails is counted (the next org said: failed-reads.test.mjs runs it)');
+    const words = ['            unreadOrgs.size && `momentum not judged for ${unreadOrgs.size} org(s): their stages could not be read`,',
+        "            overdueUnread && 'the overdue-task scan could not read the rules or the tasks: no org\\'s overdue rules ran',",
+        "            renewalsUnread && 'the renewal scan could not read the customers or the plans: no org\\'s renewals were said',",
+        '            renewalOrgsFailed && `renewals not said for ${renewalOrgsFailed} org(s): their pass failed`,'];
+    assert.ok(words.every((w) => s.includes(w)) && words.every((w, i) => i === 0 || s.indexOf(words[i - 1]) < s.indexOf(w)), 'the run says each — the momentum words first, as they were, then the overdue scan\'s, then the renewals\'');
+    assert.ok(s.includes("        ].filter(Boolean);\n        if (unsaid.length) return { statusCode: 500,"), 'only what failed, a 500');
 });
 
 test('slackAlerts: agreementRenewal is an hourly type the company can switch off', () => {

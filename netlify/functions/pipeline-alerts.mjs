@@ -291,7 +291,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                 mobile,
                 phone,
             };
-            const [alertHour]  = alertTimeStr.split(':').map(Number);
+            const [alertHour]  = String(alertTimeStr).split(':').map(Number);
             const targetUtcHour = localHourToUtc(alertHour, userTz);
             if (targetUtcHour !== nowHour) continue;
 
@@ -521,8 +521,12 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
         // whose assignee is an active user of THAT org, once per task per
         // DEDUP_DAYS at the assignee's alert hour — deduped through the same
         // ledger the task reminders use, the task id in the opportunityId
-        // column under actionType 'taskOverdue'. Never fails the run.
-        let overdueFired = 0;
+        // column under actionType 'taskOverdue'. Its reads — the rules, then the tasks, each once for every
+        // org — that fail end the scan for every org: said, the run a 500 (guide §18b138 rule 4; state §0.311).
+        // Netlify retries a 500 (state §0.101): the ledger row is written before the rules, so a retry fires no
+        // task's rules twice — save one whose row failed to write (OPEN_ITEMS §4.5, left by §0.311), or whose
+        // ledger read fails on the retry: not known to have gone, it goes again (guide §18b138 rule 6).
+        let overdueFired = 0, overdueUnread = false;
         try {
             const ruleRows = await db.select({ orgId: automations.orgId }).from(automations)
                 .where(and(eq(automations.triggerEvent, 'task.overdue'), eq(automations.active, true)));
@@ -541,7 +545,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                     const aProfile      = assignee.profile || {};
                     const aTz           = assignee.timezone || aProfile.timezone || 'UTC';
                     const aAlertTimeStr = assignee.alertTime || assignee.digestTime || aProfile.alertTime || aProfile.digestTime || '08:00';
-                    const [aAlertHour]  = aAlertTimeStr.split(':').map(Number);
+                    const [aAlertHour]  = String(aAlertTimeStr).split(':').map(Number);
                     if (localHourToUtc(aAlertHour, aTz) !== nowHour) continue;
                     if (await wasRecentlyAlerted(task.orgId, assignee.name, task.id, 'taskOverdue')) { skipped++; continue; }
                     const daysOverdue = daysBetween(task.dueDate, todayStr);
@@ -558,6 +562,7 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
                 }
             }
         } catch (err) {
+            overdueUnread = true;
             console.error('pipeline-alerts: task overdue scan failed:', err.message);
         }
 
@@ -569,67 +574,84 @@ export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
         // to the org's Slack under the company's switch. Deduped through the same
         // ledger as the deal signals, keyed on the customer: one alert per
         // customer per recipient per DEDUP_DAYS, so an unrenewed agreement nudges
-        // weekly rather than hourly. Never fails the run: the deal signals above
-        // have already gone out.
-        let renewalsSent = 0;
+        // weekly rather than hourly. Each org on its own: one whose pass fails is
+        // counted and left, the orgs after it said; a read of every org's
+        // customers or plans that fails ends the scan — either is said, the run a
+        // 500 (guide §18b138 rule 4; state §0.311). A retry sends again only what
+        // its ledger row did not record (the email and the post go before it), or
+        // what its ledger read on the retry cannot find (rule 6).
+        let renewalsSent = 0, renewalOrgsFailed = 0, renewalsUnread = false;
         try {
             const allCustomers = await db.select().from(dispatchCustomers);
             const allPlans     = await db.select().from(dispatchServicePlans);
             for (const orgId of [...new Set(allCustomers.map(c => c.orgId))]) {
-                const queue = buildRenewalQueue(
-                    allCustomers.filter(c => c.orgId === orgId),
-                    allPlans.filter(p => p.orgId === orgId),
-                    todayStr);
-                if (!queue.length) continue;
-                // Cross-tenant safety: recipients are THIS org's roster only.
-                const recipients = allUsers.filter(u =>
-                    u.orgId === orgId && reachable(u) && (u.role === 'Admin' || u.role === 'Manager'));
-                for (const r of queue) {
-                    const cust = r.customer;
-                    const detail = {
-                        customerName:   cust.name,
-                        customerNumber: cust.customerNumber || null,
-                        planName:       r.plan?.name || cust.serviceAgreement || 'Maintenance agreement',
-                        expiry:         r.expiry,
-                        daysLeft:       r.daysLeft,
-                        expired:        r.state === 'expired',
-                    };
-                    const asOpp  = { id: cust.id, opportunityName: cust.name, arr: null, stage: null };
-                    const signal = `Agreement ${r.state} — ends ${r.expiry}`;
-                    for (const u of recipients) {
-                        const profile         = u.profile || {};
-                        const resolvedProfile = { ...profile, notificationPrefs: profile.notificationPrefs || {} };
-                        const alertTimeStr    = profile.alertTime || profile.digestTime || '08:00';
-                        const [alertHour]     = alertTimeStr.split(':').map(Number);
-                        if (localHourToUtc(alertHour, profile.timezone || 'UTC') !== nowHour) continue;
-                        if (await wasRecentlyAlerted(orgId, u.name, cust.id, 'renewal')) { skipped++; continue; }
-                        try {
-                            if (wantsAlert(resolvedProfile, 'agreementRenewal')) {
-                                await sendEmail({ to: u.email, ...emailTemplates.agreementRenewal({ orgId, recipientName: u.name, ...detail }) });
-                                emailsSent++; renewalsSent++;
-                                console.log(`agreementRenewal → ${u.email} (${cust.name}, ${r.state} ${r.expiry})`);
+                try {
+                    const queue = buildRenewalQueue(
+                        allCustomers.filter(c => c.orgId === orgId),
+                        allPlans.filter(p => p.orgId === orgId),
+                        todayStr);
+                    if (!queue.length) continue;
+                    // Cross-tenant safety: recipients are THIS org's roster only.
+                    const recipients = allUsers.filter(u =>
+                        u.orgId === orgId && reachable(u) && (u.role === 'Admin' || u.role === 'Manager'));
+                    for (const r of queue) {
+                        const cust = r.customer;
+                        const detail = {
+                            customerName:   cust.name,
+                            customerNumber: cust.customerNumber || null,
+                            planName:       r.plan?.name || cust.serviceAgreement || 'Maintenance agreement',
+                            expiry:         r.expiry,
+                            daysLeft:       r.daysLeft,
+                            expired:        r.state === 'expired',
+                        };
+                        const asOpp  = { id: cust.id, opportunityName: cust.name, arr: null, stage: null };
+                        const signal = `Agreement ${r.state} — ends ${r.expiry}`;
+                        for (const u of recipients) {
+                            const profile         = u.profile || {};
+                            const resolvedProfile = { ...profile, notificationPrefs: profile.notificationPrefs || {} };
+                            const alertTimeStr    = profile.alertTime || profile.digestTime || '08:00';
+                            const [alertHour]     = String(alertTimeStr).split(':').map(Number);
+                            if (localHourToUtc(alertHour, profile.timezone || 'UTC') !== nowHour) continue;
+                            if (await wasRecentlyAlerted(orgId, u.name, cust.id, 'renewal')) { skipped++; continue; }
+                            try {
+                                if (wantsAlert(resolvedProfile, 'agreementRenewal')) {
+                                    await sendEmail({ to: u.email, ...emailTemplates.agreementRenewal({ orgId, recipientName: u.name, ...detail }) });
+                                    emailsSent++; renewalsSent++;
+                                    console.log(`agreementRenewal → ${u.email} (${cust.name}, ${r.state} ${r.expiry})`);
+                                }
+                                await logAlert(orgId, u.name, 'renewal', asOpp, signal);
+                            } catch (err) {
+                                console.error(`agreementRenewal error (${cust.name}):`, err.message);
                             }
-                            await logAlert(orgId, u.name, 'renewal', asOpp, signal);
-                        } catch (err) {
-                            console.error(`agreementRenewal error (${cust.name}):`, err.message);
+                        }
+                        // The org's channel: once per customer per DEDUP_DAYS, at the
+                        // first run after it enters the window, whatever the hour.
+                        if (!(await wasRecentlyAlerted(orgId, '__org__', cust.id, 'renewal-slack'))) {
+                            const posted = await sendSlackToOrg(orgId, slackTemplates.agreementRenewal(detail), 'agreementRenewal');
+                            if (posted) await logAlert(orgId, '__org__', 'renewal-slack', asOpp, signal);
                         }
                     }
-                    // The org's channel: once per customer per DEDUP_DAYS, at the
-                    // first run after it enters the window, whatever the hour.
-                    if (!(await wasRecentlyAlerted(orgId, '__org__', cust.id, 'renewal-slack'))) {
-                        const posted = await sendSlackToOrg(orgId, slackTemplates.agreementRenewal(detail), 'agreementRenewal');
-                        if (posted) await logAlert(orgId, '__org__', 'renewal-slack', asOpp, signal);
-                    }
+                } catch (err) {
+                    renewalOrgsFailed++;
+                    console.error(`pipeline-alerts: the renewals of ${orgId} failed —`, err.message);
                 }
             }
         } catch (err) {
+            renewalsUnread = true;
             console.error('pipeline-alerts: agreement renewals failed:', err.message);
         }
 
         const summary = `${emailsSent} emails sent (${renewalsSent} renewals), ${smsSent} SMS sent, ${overdueFired} overdue-task rules fired, ${skipped} skipped (dedup)`;
         console.log('pipeline-alerts: complete —', summary);
-        // An org whose stages could not be read had no momentum said: the run says so (state §0.303).
-        if (unreadOrgs.size) return { statusCode: 500, body: JSON.stringify({ emailsSent, smsSent, overdueFired, skipped, error: `momentum not judged for ${unreadOrgs.size} org(s): their stages could not be read` }) };
+        // An org whose stages could not be read had no momentum said (state §0.303); a scan that could not
+        // read, or an org whose renewals failed, likewise (state §0.311): the run says each, a 500.
+        const unsaid = [
+            unreadOrgs.size && `momentum not judged for ${unreadOrgs.size} org(s): their stages could not be read`,
+            overdueUnread && 'the overdue-task scan could not read the rules or the tasks: no org\'s overdue rules ran',
+            renewalsUnread && 'the renewal scan could not read the customers or the plans: no org\'s renewals were said',
+            renewalOrgsFailed && `renewals not said for ${renewalOrgsFailed} org(s): their pass failed`,
+        ].filter(Boolean);
+        if (unsaid.length) return { statusCode: 500, body: JSON.stringify({ emailsSent, smsSent, overdueFired, skipped, error: unsaid.join('; ') }) };
         return { statusCode: 200, body: JSON.stringify({ emailsSent, smsSent, overdueFired, skipped }) };
 
     } catch (err) {

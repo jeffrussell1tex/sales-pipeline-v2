@@ -136,7 +136,8 @@ test("the five hourly signals fire on the signal alone; the rep's preference gat
     // Momentum: short of its own org's last two open stages (state §0.303), each org read once, settling on its own.
     for (const x of ["            let late = null;\n            if (createdDays !== null && createdDays <= 14 && stageCount >= 2) {\n                try { late = await lateStagesOf(orgId); }\n                catch (err) { unreadOrgs.add(orgId);", "                late && !late.has(opp.stage)\n            ) {",
         "if (!lateByOrg.has(org)) lateByOrg.set(org, funnelInOrg(org).then((list) => new Set(commitStagesOf({ funnelStages: list }))));\n            return lateByOrg.get(org);",
-        "        if (unreadOrgs.size) return { statusCode: 500, body: JSON.stringify({ emailsSent, smsSent, overdueFired, skipped, error: `momentum not judged for ${unreadOrgs.size} org(s): their stages could not be read` }) };\n        return { statusCode: 200,"]) assert.equal(count(s, x), 1, x);
+        "            unreadOrgs.size && `momentum not judged for ${unreadOrgs.size} org(s): their stages could not be read`,\n",
+        "        if (unsaid.length) return { statusCode: 500, body: JSON.stringify({ emailsSent, smsSent, overdueFired, skipped, error: unsaid.join('; ') }) };\n        return { statusCode: 200,"]) assert.equal(count(s, x), 1, x);   // the momentum words in the list, as they were, each once (their order: agreement-renewals.test.mjs)
     assert.ok(!/funnelInOrg\([^)]*\)\s*\.catch/.test(s), 'never a default in its place');
     // A fall into Critical since AI scoring batch 2C (Jeff, 17 Nov, Q1): the signal alone, no preference in it.
     assert.ok(s.includes('            if (fellToCritical(winScore, now.getTime() - 86400000)) {'), 'score drop');

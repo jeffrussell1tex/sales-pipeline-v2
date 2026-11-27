@@ -476,7 +476,7 @@ test('the hourly job scans overdue tasks for orgs that have a rule, at the assig
     const fire  = s.indexOf("                        await dispatchAutomations(task.orgId, 'task.overdue', taskEventData(task, { days_overdue: daysOverdue }));");
     assert.ok(gate < dedup && dedup < log && log < fire, 'gate → dedup → ledger → the rule');
     assert.ok(s.includes('                    const daysOverdue = daysBetween(task.dueDate, todayStr);'), 'days overdue = today minus the due date');
-    const section = s.slice(gate, s.indexOf('        let renewalsSent = 0;', gate));   // comments are stripped: end at the renewals' first code line
+    const section = s.slice(gate, s.indexOf('        let renewalsSent = 0, renewalOrgsFailed = 0, renewalsUnread = false;', gate));   // comments are stripped: end at the renewals' first code line
     assert.ok(section.length > 500 && section.length < 4000, 'the task section is bounded');
     assert.ok(!/sendEmail|sendSms|trySendSms|sendSlackToOrg/.test(section), 'no email, SMS or Slack of its own — the rule is the switch');
     assert.equal((s.match(/'task\.overdue'/g) || []).length, 2, 'the rule read and the fire, nothing else');
